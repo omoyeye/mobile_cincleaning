@@ -183,8 +183,12 @@ export const customerApi = {
   createBooking: (data: Parameters<typeof bookingsApi.create>[0]) => bookingsApi.create(data),
   cancelBooking: (id: number, shortNoticeConsent?: boolean) => bookingsApi.cancel(id, shortNoticeConsent),
   rateBooking: (id: number, rating: number, feedback?: string) => bookingsApi.rate(id, rating, feedback),
+  /** Client moves their booking; allowed up to 24 hours before it starts. */
   rescheduleBooking: (id: number, date: string, time: string) =>
-    request(`/api/bookings/${id}`, { method: 'PATCH', body: JSON.stringify({ date, time }) }),
+    request<{ message: string; date: string; time: string; status: string; cleanerKept: boolean }>(`/api/bookings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ date, time }),
+    }),
 
   getServices: () => publicApi.getServices(),
   getExtras: () => publicApi.getExtras(),
@@ -226,6 +230,13 @@ export const staffApi = {
 
   startTravel: (bookingId: number, body: { lat?: number; lng?: number; silent?: boolean } = {}) =>
     request<{ enRouteAt: string }>(`/api/staff/jobs/${bookingId}/en-route`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Clock-in on site: the client is told their cleaner has arrived (once). */
+  markArrived: (bookingId: number, body: { lat?: number; lng?: number } = {}) =>
+    request<{ arrivedAt: string }>(`/api/staff/jobs/${bookingId}/arrived`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

@@ -54,14 +54,16 @@ export function usePushNotifications() {
       const data = response.notification.request.content.data as Record<string, any> | undefined;
       if (!data) return;
 
-      if (data.type === 'job_prompt' && data.bookingId) {
+      const isStaff = user?.role === 'staff';
+      const jobTypes = ['job_prompt', 'job_assigned', 'job_update'];
+      if (data.type === 'chat_message' && data.bookingId) {
+        router.push(`/chat/${data.bookingId}`);
+      } else if (data.bookingId && (jobTypes.includes(String(data.type)) || isStaff)) {
         router.push(`/job/${data.bookingId}`);
       } else if (data.bookingId) {
         router.push(`/booking/${data.bookingId}`);
-      } else if (data.type === 'chat_message' && data.bookingId) {
-        router.push(`/chat/${data.bookingId}`);
       } else if (data.type === 'invoice') {
-        router.push('/(customer)/bookings');
+        router.push(isStaff ? '/(staff)/earnings' : '/(customer)/bookings');
       } else {
         const role = user?.role;
         if (role === 'staff') router.push('/(staff)');

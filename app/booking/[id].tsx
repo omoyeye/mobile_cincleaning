@@ -25,6 +25,17 @@ import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking, BookingTracking } from '../../types';
 import { distanceKm, formatClock, isTodayYmd, minutesAgo } from '../../utils/tracking';
 
+/** Clients can move a booking up to this many hours before it starts (the server enforces the same rule). */
+const RESCHEDULE_NOTICE_HOURS = 24;
+
+/** Hours from now until a local YYYY-MM-DD + HH:MM start. */
+function hoursUntil(date: string, time: string): number {
+  const [y, m, d] = String(date || '').split('-').map(Number);
+  const [hh, mm] = String(time || '00:00').split(':').map(Number);
+  if (!y || !m || !d) return -Infinity;
+  return (new Date(y, m - 1, d, hh || 0, mm || 0).getTime() - Date.now()) / 3600000;
+}
+
 function getStatusColor(status: string) {
   switch (status) {
     case 'Pending': return { bg: COLORS.status.pendingBg, text: COLORS.status.pending };
@@ -158,12 +169,16 @@ export default function BookingDetailScreen() {
       showToast('Please pick a date and time', 'warning');
       return;
     }
+    if (hoursUntil(rescheduleDate, rescheduleTime) < RESCHEDULE_NOTICE_HOURS) {
+      showToast(`Choose a new time at least ${RESCHEDULE_NOTICE_HOURS} hours from now`, 'warning');
+      return;
+    }
     setRescheduling(true);
     try {
-      await customerApi.rescheduleBooking(booking.id, rescheduleDate, rescheduleTime);
-      setBooking((prev) => prev ? { ...prev, date: rescheduleDate, time: rescheduleTime } : prev);
+      const res = await customerApi.rescheduleBooking(booking.id, rescheduleDate, rescheduleTime);
+      setBooking((prev) => prev ? { ...prev, date: rescheduleDate, time: rescheduleTime, status: (res.status as typeof prev.status) || prev.status } : prev);
       setShowReschedule(false);
-      showToast('Booking rescheduled', 'success');
+      showToast(res.cleanerKept === false ? 'Booking moved. We will confirm your cleaner shortly.' : 'Booking moved', 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not reschedule', 'error');
     }
@@ -194,6 +209,7 @@ export default function BookingDetailScreen() {
 
   const sc = getStatusColor(booking.status);
   const canCancel = booking.status === 'Pending' || booking.status === 'Confirmed';
+  const canReschedule = canCancel && hoursUntil(booking.date, booking.time) >= RESCHEDULE_NOTICE_HOURS;
   const canRate = booking.status === 'Completed' && !booking.rating;
   const canChat = booking.status !== 'Cancelled' && !booking.chatClosedByAdmin;
   const isStaff = user?.role === 'staff';
@@ -499,7 +515,13 @@ export default function BookingDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {canCancel && !isStaff && !showReschedule && (
+          {canCancel && !canReschedule && !isStaff && (
+            <Text style={styles.rescheduleHint}>
+              Bookings can be moved up to {RESCHEDULE_NOTICE_HOURS} hours before they start. Please contact us to change this one.
+            </Text>
+          )}
+
+          {canReschedule && !isStaff && !showReschedule && (
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnOutline]}
               onPress={() => {
@@ -516,6 +538,7 @@ export default function BookingDetailScreen() {
           {showReschedule && (
             <View style={styles.rescheduleCard}>
               <Text style={styles.rescheduleTitle}>Reschedule Booking</Text>
+              <Text style={styles.rescheduleHint}>Pick a new time at least {RESCHEDULE_NOTICE_HOURS} hours from now. Your cleaner and our team will be told.</Text>
               <View style={styles.rescheduleRow}>
                 <View style={styles.rescheduleField}>
                   <Text style={styles.rescheduleLabel}>Date</Text>
@@ -846,6 +869,7 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   rescheduleTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  rescheduleHint: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
   rescheduleRow: { flexDirection: 'row', gap: SPACING.sm },
   rescheduleField: { flex: 1, gap: SPACING.xs },
   rescheduleLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary, textTransform: 'uppercase' },

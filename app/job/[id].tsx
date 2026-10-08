@@ -242,9 +242,9 @@ export default function JobScreen() {
       Alert.alert('Location Error', 'Could not get your location. Proceeding without it.');
     }
 
-    // Arrival counts as en route (silently) so admin's "no cleaner on the way" warning does not fire.
+    // Tells the client their cleaner has arrived (and counts as en route for admin warnings).
     if (isJobToday) {
-      staffApi.startTravel(bookingId, { ...(arrivedAt ?? {}), silent: true }).catch(() => {});
+      staffApi.markArrived(bookingId, arrivedAt ?? {}).catch(() => {});
     }
 
     const now = new Date();
