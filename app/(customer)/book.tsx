@@ -20,6 +20,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { publicApi, bookingsApi } from '../../services/api';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { ServiceConfig, Extra, SelectedExtra, PropertyDetails } from '../../types';
+import { calculateHourlyPrice, hourlyRateFor, londonRateOf, lookupPricingRegion, type PricingRegion } from '../../utils/pricing';
+
+/** Mobile materials options -> the keys the website and API use. */
+const MATERIALS_KEY: Record<string, string | null> = { none: null, hoover: 'hoover_only', hoover_materials: 'hoover_and_materials' };
+const FULL_UK_POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 
 type Step = 'service' | 'details' | 'extras' | 'datetime' | 'address' | 'summary';
 const ALL_STEPS: Step[] = ['service', 'details', 'extras', 'datetime', 'address', 'summary'];
@@ -120,6 +125,8 @@ export default function BookScreen() {
   const [time, setTime] = useState('');
   const [frequency, setFrequency] = useState<typeof FREQUENCIES[number]>('One-time');
   const [address, setAddress] = useState({ line1: '', line2: '', city: '', postcode: '' });
+  const [pricingRegion, setPricingRegion] = useState<PricingRegion | null>(null);
+  const [regionChecking, setRegionChecking] = useState(false);
   const [postcodeResults, setPostcodeResults] = useState<{ line1: string; city: string }[]>([]);
   const [lookingUp, setLookingUp] = useState(false);
   const [contactName, setContactName] = useState(user?.name || '');
@@ -144,6 +151,37 @@ export default function BookScreen() {
   const isDeepOrEOT = trigger === 'deep' || trigger === 'end_of_tenancy';
   const isAirbnb = trigger === 'airbnb';
   const isGeneral = trigger === 'standard' || trigger === 'custom';
+  const isStandard = trigger === 'standard';
+  /** Standard cleans with a London rate need the postcode before a price can be shown. */
+  const usesRegionalRate = isStandard && londonRateOf(selectedService) !== null;
+  const effectiveRate = selectedService
+    ? isStandard
+      ? hourlyRateFor(selectedService, pricingRegion)
+      : Number(selectedService.baseRate) || 0
+    : 0;
+  const regionReady = !usesRegionalRate || (pricingRegion !== null && !regionChecking);
+
+  useEffect(() => {
+    const pc = address.postcode.trim();
+    if (!FULL_UK_POSTCODE.test(pc)) {
+      setPricingRegion(null);
+      setRegionChecking(false);
+      return;
+    }
+    let cancelled = false;
+    setRegionChecking(true);
+    const timer = setTimeout(() => {
+      lookupPricingRegion(pc).then((r) => {
+        if (cancelled) return;
+        setPricingRegion(r?.region ?? null);
+        setRegionChecking(false);
+      });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [address.postcode]);
 
   const activeSteps = useMemo((): Step[] => {
     if (!selectedService) return ALL_STEPS;
@@ -229,11 +267,47 @@ export default function BookScreen() {
     });
   }, [findExtraByName]);
 
-  const breakdown = useMemo((): { lines: BreakdownLine[]; total: number } => {
-    if (!selectedService) return { lines: [], total: 0 };
+  const breakdown = useMemo((): { lines: BreakdownLine[]; total: number; tipAmount: number } => {
+    if (!selectedService) return { lines: [], total: 0, tipAmount: 0 };
     const lines: BreakdownLine[] = [];
     const baseRate = Number(selectedService.baseRate) || 0;
     let calculated = 0;
+
+    if (isStandard) {
+      const totalHrs = durationHours + durationMinutes / 60;
+      const durLabel = durationMinutes > 0 ? `${durationHours}h 30m` : `${durationHours}h`;
+      const chosen = selectedExtras
+        .map((se) => {
+          const ex = extras.find((e) => e.id === se.id);
+          return ex ? { ex, se } : null;
+        })
+        .filter(Boolean) as Array<{ ex: Extra; se: SelectedExtra }>;
+      const p = calculateHourlyPrice({
+        hourlyRate: effectiveRate,
+        hours: totalHrs,
+        extras: chosen.map(({ ex, se }) => ({ price: ex.price, quantity: se.quantity })),
+        cleaningMaterials: MATERIALS_KEY[materials],
+        discount: appliedDiscount ? { type: appliedDiscount.type, value: appliedDiscount.value } : null,
+        tip: useCustomTip ? { amount: parseFloat(customTip) || 0 } : { percent: tipPercent },
+      });
+      lines.push({
+        label: `${selectedService.name} (${durLabel} × £${effectiveRate.toFixed(2)}/hr${pricingRegion === 'london' ? ', London rate' : ''})`,
+        amount: p.base,
+      });
+      chosen.forEach(({ ex, se }) => {
+        lines.push({ label: `${ex.name}${se.quantity > 1 ? ` x${se.quantity}` : ''}`, amount: Number(ex.price) * se.quantity });
+      });
+      if (p.materials > 0) {
+        lines.push({ label: materials === 'hoover' ? 'Hoover only' : 'Hoover + materials', amount: p.materials });
+      }
+      if (p.discount > 0 && appliedDiscount) {
+        lines.push({ label: `Discount (${appliedDiscount.code})`, amount: -p.discount, type: 'discount' });
+      }
+      if (p.tip > 0) {
+        lines.push({ label: useCustomTip ? 'Tip' : `Tip (${tipPercent}%)`, amount: p.tip, type: 'tip' });
+      }
+      return { lines, total: p.total, tipAmount: p.tip };
+    }
 
     if (isQuoteBased) {
       lines.push({ label: 'Quote-based service', amount: 0 });
@@ -314,10 +388,10 @@ export default function BookScreen() {
       });
     }
 
-    return { lines, total: afterDiscount + tipAmount };
+    return { lines, total: afterDiscount + tipAmount, tipAmount };
   }, [selectedService, trigger, property.bedrooms, durationHours, durationMinutes,
       selectedExtras, extras, materials, appliedDiscount, tipPercent, customTip, useCustomTip,
-      isQuoteBased, isAirbnb, isDeepOrEOT]);
+      isQuoteBased, isAirbnb, isDeepOrEOT, isStandard, effectiveRate, pricingRegion]);
 
   const toggleDrawer = useCallback(() => {
     const toValue = summaryExpanded ? 0 : 1;
@@ -331,13 +405,14 @@ export default function BookScreen() {
       case 'details': {
         if (isAirbnb) return (property.bedrooms || 0) >= 1;
         if (isQuoteBased) return commercialDetails.trim().length >= COMMERCIAL_MIN_CHARS;
+        if (usesRegionalRate) return FULL_UK_POSTCODE.test(address.postcode.trim()) && regionReady;
         return true;
       }
       case 'extras': return true;
       case 'datetime': return date.length > 0 && time.length > 0;
       case 'address':
         return address.line1.length > 0 && address.postcode.length > 0
-          && contactName.length > 0 && contactEmail.length > 0;
+          && contactName.length > 0 && contactEmail.length > 0 && regionReady;
       case 'summary': return true;
       default: return false;
     }
@@ -427,6 +502,7 @@ export default function BookScreen() {
           commercialDetails: isQuoteBased ? commercialDetails : undefined,
           callOutCharge: isDeepOrEOT ? resolveCallOutCharge(selectedService) : undefined,
           smsUpdatesOptIn: smsOptIn,
+          cleaningMaterials: MATERIALS_KEY[materials] ?? undefined,
         },
         extras: selectedExtras.map((se) => ({ id: se.id, quantity: se.quantity })),
         instructions,
@@ -434,6 +510,7 @@ export default function BookScreen() {
         duration: totalDuration,
         discountCode: appliedDiscount?.code || undefined,
         discountAmount: discountAmt > 0 ? discountAmt : undefined,
+        tipAmount: Number(breakdown.tipAmount.toFixed(2)),
       });
       Alert.alert(
         'Booking Confirmed!',
@@ -525,7 +602,9 @@ export default function BookScreen() {
                     ? 'Quote based'
                     : (svcTrigger === 'deep' || svcTrigger === 'end_of_tenancy')
                       ? `From ${'£'}${resolveCallOutCharge(svc).toFixed(0)} call-out`
-                      : `From ${'£'}${Number(svc.baseRate).toFixed(2)}/hr`;
+                      : svcTrigger === 'standard' && londonRateOf(svc) !== null
+                        ? `From ${'£'}${Number(svc.baseRate).toFixed(2)}/hr · London ${'£'}${londonRateOf(svc)!.toFixed(2)}/hr`
+                        : `From ${'£'}${Number(svc.baseRate).toFixed(2)}/hr`;
                   return (
                     <TouchableOpacity
                       key={svc.id}
@@ -755,6 +834,29 @@ export default function BookScreen() {
                 <>
                   <Text style={styles.stepTitle}>Property & Duration</Text>
                   <Text style={styles.stepSub}>Tell us about your space and how long you need</Text>
+
+                  {usesRegionalRate && (
+                    <>
+                      <Text style={styles.fieldLabel}>Property postcode</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={address.postcode}
+                        onChangeText={(t) => setAddress((a) => ({ ...a, postcode: t.toUpperCase() }))}
+                        placeholder="e.g. E2 7NX or M3 2BW"
+                        placeholderTextColor={COLORS.textTertiary}
+                        autoCapitalize="characters"
+                      />
+                      <Text style={[styles.stepSub, { marginTop: SPACING.xs, marginBottom: SPACING.md }]}>
+                        {regionChecking
+                          ? 'Checking your area...'
+                          : pricingRegion === 'london'
+                            ? `London postcode: £${effectiveRate.toFixed(2)} per hour`
+                            : pricingRegion === 'standard'
+                              ? `£${effectiveRate.toFixed(2)} per hour for this postcode`
+                              : `We use your postcode for the right hourly rate (London £${(londonRateOf(selectedService) ?? 0).toFixed(2)}/hr).`}
+                      </Text>
+                    </>
+                  )}
 
                   <Text style={styles.fieldLabel}>Property Size</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>

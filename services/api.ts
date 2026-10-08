@@ -122,6 +122,7 @@ export const bookingsApi = {
     discountAmount?: number;
     frequency?: string;
     duration?: number;
+    tipAmount?: number;
   }) =>
     request<{ id: number; bookingId: string; message: string }>('/api/bookings', {
       method: 'POST',

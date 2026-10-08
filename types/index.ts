@@ -86,6 +86,8 @@ export interface Booking {
   invoicePaid?: boolean;
   adminNotes?: string;
   stripePaymentLink?: string;
+  priceRegion?: 'london' | 'standard' | null;
+  hourlyRate?: number | string | null;
   /** ISO time the cleaner tapped "Start travel". */
   enRouteAt?: string | null;
   cleanerLocation?: CleanerLocation | null;
@@ -126,6 +128,8 @@ export interface ServiceConfig {
   id: number;
   name: string;
   baseRate: number;
+  /** Hourly rate for Greater London postcodes (Standard cleaning); null = baseRate everywhere. */
+  londonRate?: number | string | null;
   pricingModel?: 'hourly' | 'flat' | 'size_based' | 'room_based' | 'quote';
   features?: string[];
   minDuration?: number;
