@@ -153,7 +153,8 @@ export interface Staff {
   status: string;
   hourlyRate?: number;
   skills?: string[];
-  availability?: DayAvailability[];
+  /** Shared weekly format { Mon: { active, start, end } }; older app versions stored a DayAvailability list. */
+  availability?: DayAvailability[] | Record<string, { active: boolean; start: string; end: string }>;
   phone?: string;
   address?: string;
   postcode?: string;

@@ -21,6 +21,7 @@ import { WebView } from 'react-native-webview';
 import { staffApi, bookingsApi } from '../../services/api';
 import { useToast } from '../../components/Toast';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { StatusBadge, StepTracker } from '../../components/staff/StaffKit';
 import type { Booking } from '../../types';
 import { formatClock, isTodayYmd } from '../../utils/tracking';
 
@@ -332,6 +333,21 @@ export default function JobScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Who, status and where the cleaner is in the job */}
+        <View style={styles.jobHead}>
+          <View style={styles.jobHeadRow}>
+            <Text style={styles.jobHeadName} numberOfLines={1}>
+              {booking.contact?.name || 'Client'}
+            </Text>
+            <StatusBadge status={phase === 'done' ? 'Completed' : booking.status} />
+          </View>
+          <Text style={styles.jobHeadRef}>{booking.bookingId || `Booking #${booking.id}`}</Text>
+          <StepTracker
+            steps={['Travel', 'On site', 'Finish', 'Done']}
+            current={phase === 'pre' ? 0 : phase === 'clocked_in' ? 1 : phase === 'completing' ? 2 : 3}
+          />
+        </View>
+
         {/* Job info card */}
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Service</Text>
@@ -676,6 +692,10 @@ export default function JobScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  jobHead: { marginBottom: SPACING.base },
+  jobHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm },
+  jobHeadName: { flex: 1, fontSize: 24, fontWeight: '700', color: COLORS.text, letterSpacing: -0.3 },
+  jobHeadRef: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background, gap: SPACING.sm },
   errorText: { fontSize: 16, color: COLORS.textSecondary },
   backLink: { marginTop: SPACING.md },

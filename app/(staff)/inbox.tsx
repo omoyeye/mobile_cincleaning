@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { staffApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { BrandBar, ScreenHeader } from '../../components/staff/StaffKit';
 import type { Notification, DirectMessage } from '../../types';
 
 type InboxTab = 'alerts' | 'admin';
@@ -156,11 +157,9 @@ export default function InboxScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.logoRow}>
-        <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-      </View>
-      <View style={styles.header}>
-        <Text style={styles.title}>Inbox</Text>
+      <BrandBar />
+      <View style={{ paddingHorizontal: SPACING.lg }}>
+        <ScreenHeader title="Inbox" subtitle="Alerts and messages from the office." />
       </View>
 
       <View style={styles.tabRow}>
@@ -179,7 +178,7 @@ export default function InboxScreen() {
           onPress={() => setTab('admin')}
         >
           <Ionicons name="chatbubbles-outline" size={16} color={tab === 'admin' ? COLORS.primary : COLORS.textTertiary} />
-          <Text style={[styles.tabText, tab === 'admin' && styles.tabTextActive]}>Admin Chat</Text>
+          <Text style={[styles.tabText, tab === 'admin' && styles.tabTextActive]}>Office</Text>
           {adminUnread > 0 && (
             <View style={[styles.tabBadge, { backgroundColor: COLORS.secondary }]}>
               <Text style={styles.tabBadgeText}>{adminUnread}</Text>

@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { ListSkeleton } from '../../components/SkeletonLoader';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { BrandBar, ScreenHeader, availabilityToList, findMe, listToWeeklyAvailability } from '../../components/staff/StaffKit';
 import type { Staff, DayAvailability } from '../../types';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -132,14 +133,11 @@ export default function RotaScreen() {
   const fetchProfile = useCallback(async () => {
     try {
       const profiles = await staffApi.getStaffList();
-      const me = profiles.find((s: Staff) => s.email === user?.email);
+      const me = findMe(profiles, user);
       if (me) {
         setStaff(me);
-        setAvailability(
-          me.availability && me.availability.length > 0
-            ? me.availability
-            : DAYS.map((d) => ({ day: d, isOpen: d !== 'Sunday', start: '08:00', end: '18:00' }))
-        );
+        // Reads both the shared weekly format and the list older app versions saved.
+        setAvailability(availabilityToList(me.availability));
       }
     } catch {
       showToast('Could not load availability', 'error');
@@ -183,7 +181,8 @@ export default function RotaScreen() {
     if (!staff) return;
     setSaving(true);
     try {
-      await staffApi.updateProfile(staff.id, { availability });
+      // Saved in the shared weekly format so the website, admin rota and Job Assignment can read it.
+      await staffApi.updateProfile(staff.id, { availability: listToWeeklyAvailability(availability) });
       showToast('Availability updated', 'success');
     } catch {
       showToast('Could not save availability', 'error');
@@ -194,9 +193,7 @@ export default function RotaScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.logoRow}>
-          <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        </View>
+        <BrandBar />
         <ListSkeleton count={7} />
       </SafeAreaView>
     );
@@ -218,13 +215,8 @@ export default function RotaScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.logoRow}>
-          <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        </View>
-        <View style={styles.header}>
-          <Text style={styles.title}>My Availability</Text>
-          <Text style={styles.subtitle}>{openDays} of 7 days available</Text>
-        </View>
+        <BrandBar />
+        <ScreenHeader title="My availability" subtitle={`${openDays} of 7 days available · the office uses this when assigning jobs`} />
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>

@@ -1,56 +1,51 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { staffApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { ListSkeleton, StatsSkeleton } from '../../components/SkeletonLoader';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { BrandBar, Card, EmptyState, ScreenHeader, SectionTitle, StatusBadge, findMe, jobPay, localWeekRange } from '../../components/staff/StaffKit';
 import type { Booking, Staff, StaffInvoice } from '../../types';
+
+type WeekJob = { id: number; date: string; customer: string; staffCount: number; bookedHours: number; yourHours: number; hourlyRate: number; yourShare: number };
+type WeekInvoice = { weekStart: string; weekEnd: string; jobs: WeekJob[]; totalShare: number };
 
 function MiniBarChart({ data, labels }: { data: number[]; labels: string[] }) {
   const max = Math.max(...data, 1);
   return (
-    <View style={chartStyles.container}>
-      <Text style={chartStyles.title}>Weekly Earnings</Text>
+    <Card style={{ marginBottom: SPACING.base }}>
+      <Text style={chartStyles.title}>Last 6 weeks</Text>
       <View style={chartStyles.chart}>
         {data.map((val, i) => (
           <View key={i} style={chartStyles.barCol}>
+            {val > 0 ? <Text style={chartStyles.barValue}>{'£'}{val.toFixed(0)}</Text> : <Text style={chartStyles.barValue}> </Text>}
             <View style={chartStyles.barTrack}>
-              <View
-                style={[
-                  chartStyles.barFill,
-                  {
-                    height: `${Math.max((val / max) * 100, 2)}%`,
-                    backgroundColor: val > 0 ? COLORS.primary : COLORS.border,
-                  },
-                ]}
-              />
+              <View style={[chartStyles.barFill, { height: `${Math.max((val / max) * 100, 3)}%`, backgroundColor: i === data.length - 1 ? COLORS.secondary : val > 0 ? COLORS.primary : COLORS.border }]} />
             </View>
             <Text style={chartStyles.barLabel}>{labels[i]}</Text>
-            {val > 0 && <Text style={chartStyles.barValue}>{'£'}{val.toFixed(0)}</Text>}
           </View>
         ))}
       </View>
-    </View>
+    </Card>
   );
 }
 
+const shortDate = (ymd: string) => {
+  const [y, m, d] = String(ymd || '').split('-').map(Number);
+  return y && m && d ? new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : ymd;
+};
+
 export default function EarningsScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const { showToast } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [staff, setStaff] = useState<Staff | null>(null);
+  const [week, setWeek] = useState<WeekInvoice | null>(null);
   const [invoices, setInvoices] = useState<StaffInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,18 +53,17 @@ export default function EarningsScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [bks, profiles] = await Promise.all([
-        staffApi.getBookings(),
-        staffApi.getStaffList(),
-      ]);
-      const me = profiles.find((s: Staff) => s.email === user?.email);
-      setStaff(me || null);
+      const [bks, profiles] = await Promise.all([staffApi.getBookings(), staffApi.getStaffList()]);
+      const me = findMe(profiles, user);
+      setStaff(me);
       setBookings(bks.filter((b) => b.status === 'Completed').sort((a, b) => b.date.localeCompare(a.date)));
       if (me) {
-        try {
-          const hist = await staffApi.getInvoiceHistory(me.id);
-          setInvoices(hist);
-        } catch {}
+        const [hist, weekly] = await Promise.all([
+          staffApi.getInvoiceHistory(me.id).catch(() => [] as StaffInvoice[]),
+          staffApi.getWeeklyInvoice(me.id).catch(() => null),
+        ]);
+        setInvoices(Array.isArray(hist) ? hist : []);
+        setWeek(weekly && Array.isArray(weekly.jobs) ? (weekly as WeekInvoice) : null);
       }
     } catch {
       showToast('Could not load earnings data', 'error');
@@ -77,7 +71,9 @@ export default function EarningsScreen() {
     setLoading(false);
   }, [user]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -85,68 +81,61 @@ export default function EarningsScreen() {
     setRefreshing(false);
   };
 
+  // Pay is always the cleaner's share: booked hours ÷ people on the job × hourly rate (never the client's price).
+  const rate = Number(staff?.hourlyRate) || 0;
+  const payOf = (b: Booking) => jobPay(b, rate).pay;
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const lastMonth = (() => {
-    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  })();
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const sumFor = (prefix: string) => bookings.filter((b) => b.date.startsWith(prefix)).reduce((s, b) => s + payOf(b), 0);
+  const thisMonthEarnings = sumFor(thisMonth);
+  const lastMonthEarnings = sumFor(lastMonth);
+  const totalEarnings = bookings.reduce((s, b) => s + payOf(b), 0);
 
-  const thisWeekStart = (() => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - d.getDay() + 1);
-    return d.toISOString().split('T')[0];
-  })();
+  const weekRange = week ? { start: week.weekStart, end: week.weekEnd } : localWeekRange();
+  const weekTotal = week ? Number(week.totalShare || 0) : 0;
+  const weekJobs = week?.jobs ?? [];
+  const weekHours = weekJobs.reduce((s, j) => s + Number(j.yourHours || 0), 0);
 
-  const calcEarnings = (datePrefix: string) =>
-    bookings
-      .filter((b) => b.date.startsWith(datePrefix))
-      .reduce((sum, b) => sum + Number(b.totalPrice), 0);
-
-  const getWeeklyChartData = () => {
-    const weeks: number[] = [];
+  const chart = (() => {
+    const data: number[] = [];
     const labels: string[] = [];
     for (let i = 5; i >= 0; i--) {
-      const weekStart = new Date(now);
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1 - i * 7);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-      const startStr = weekStart.toISOString().split('T')[0];
-      const endStr = weekEnd.toISOString().split('T')[0];
-      const weekTotal = bookings
-        .filter((b) => b.date >= startStr && b.date <= endStr)
-        .reduce((sum, b) => sum + Number(b.totalPrice), 0);
-      weeks.push(weekTotal);
-      labels.push(`${weekStart.getDate()}/${weekStart.getMonth() + 1}`);
+      const ref = new Date(now);
+      ref.setDate(ref.getDate() - i * 7);
+      const { start, end } = localWeekRange(ref);
+      data.push(bookings.filter((b) => b.date >= start && b.date <= end).reduce((s, b) => s + payOf(b), 0));
+      const [, m, d] = start.split('-').map(Number);
+      labels.push(`${d}/${m}`);
     }
-    return { data: weeks, labels };
-  };
+    return { data, labels };
+  })();
 
   const handleSubmitInvoice = async () => {
     if (!staff) return;
+    if (weekJobs.length === 0) {
+      Alert.alert('Nothing to invoice yet', 'You have no completed jobs this week.');
+      return;
+    }
+    if (!staff.bankName || !staff.accountNumber || !staff.sortCode) {
+      Alert.alert('Add your bank details', 'We need your bank details before you can submit an invoice.', [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Add bank details', onPress: () => router.push('/bank-details') },
+      ]);
+      return;
+    }
     setSubmittingInvoice(true);
     try {
-      const weekJobs = bookings.filter((b) => b.date >= thisWeekStart);
-      if (weekJobs.length === 0) {
-        Alert.alert('No Jobs', 'You have no completed jobs this week to invoice.');
-        setSubmittingInvoice(false);
-        return;
-      }
-      const totalHours = weekJobs.reduce((sum, b) => sum + (b.propertyDetails?.duration || 0), 0);
       await staffApi.submitInvoice(staff.id, {
-        totalAmount: thisWeekEarnings,
-        jobs: weekJobs.map((b) => ({
-          bookingId: b.id,
-          date: b.date,
-          service: b.serviceType,
-          amount: b.totalPrice,
-        })),
-        week: thisWeekStart,
+        totalAmount: weekTotal,
+        jobs: weekJobs,
+        week: `${weekRange.start} → ${weekRange.end}`,
         bankDetails: { bankName: staff.bankName, accountNumber: staff.accountNumber, sortCode: staff.sortCode },
-        weekTotalHours: totalHours,
+        weekTotalHours: weekHours,
         weekJobCount: weekJobs.length,
       });
-      showToast('Weekly invoice submitted', 'success');
+      showToast(`Invoice for £${weekTotal.toFixed(2)} submitted`, 'success');
       await fetchData();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not submit invoice', 'error');
@@ -154,27 +143,15 @@ export default function EarningsScreen() {
     setSubmittingInvoice(false);
   };
 
-  const thisWeekEarnings = bookings
-    .filter((b) => b.date >= thisWeekStart)
-    .reduce((sum, b) => sum + Number(b.totalPrice), 0);
-
-  const thisMonthEarnings = calcEarnings(thisMonth);
-  const lastMonthEarnings = calcEarnings(lastMonth);
-  const totalEarnings = bookings.reduce((sum, b) => sum + Number(b.totalPrice), 0);
-
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.logoRow}>
-          <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        </View>
+        <BrandBar />
         <StatsSkeleton />
         <ListSkeleton count={4} />
       </SafeAreaView>
     );
   }
-
-  const chartData = getWeeklyChartData();
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -183,103 +160,130 @@ export default function EarningsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.logoRow}>
-          <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        </View>
-        <View style={styles.header}>
-          <Text style={styles.title}>Earnings</Text>
-          {staff && <Text style={styles.rate}>{'£'}{staff.hourlyRate}/hr</Text>}
-        </View>
+        <BrandBar />
+        <ScreenHeader
+          title="Earnings"
+          subtitle="Your pay and weekly invoices."
+          right={staff ? <Text style={styles.rate}>{'£'}{rate.toFixed(2)}/hr</Text> : null}
+        />
 
-        <View style={styles.mainCard}>
-          <Text style={styles.mainLabel}>This Month</Text>
-          <Text style={styles.mainValue}>{'£'}{thisMonthEarnings.toFixed(2)}</Text>
-          <Text style={styles.mainSub}>
-            {bookings.filter((b) => b.date.startsWith(thisMonth)).length} completed jobs
+        {/* This week */}
+        <View style={styles.hero}>
+          <View style={styles.heroGlow} />
+          <Text style={styles.heroLabel}>
+            This week · {shortDate(weekRange.start)} to {shortDate(weekRange.end)}
           </Text>
+          <Text style={styles.heroValue}>{'£'}{weekTotal.toFixed(2)}</Text>
+          <Text style={styles.heroSub}>
+            {weekJobs.length} {weekJobs.length === 1 ? 'job' : 'jobs'} · {weekHours.toFixed(2)} of your hours
+          </Text>
+          {staff ? (
+            <TouchableOpacity
+              style={[styles.heroBtn, (submittingInvoice || weekJobs.length === 0) && { opacity: 0.6 }]}
+              onPress={handleSubmitInvoice}
+              disabled={submittingInvoice}
+              activeOpacity={0.85}
+            >
+              {submittingInvoice ? (
+                <ActivityIndicator color={COLORS.secondary} />
+              ) : (
+                <>
+                  <Ionicons name="paper-plane-outline" size={16} color={COLORS.secondary} />
+                  <Text style={styles.heroBtnText}>Submit weekly invoice</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.statValue}>{'£'}{thisWeekEarnings.toFixed(2)}</Text>
-            <Text style={styles.statLabel}>This Week</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Ionicons name="time-outline" size={20} color="#6366f1" />
-            <Text style={styles.statValue}>{'£'}{lastMonthEarnings.toFixed(2)}</Text>
-            <Text style={styles.statLabel}>Last Month</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Ionicons name="trending-up-outline" size={20} color="#22c55e" />
-            <Text style={styles.statValue}>{'£'}{totalEarnings.toFixed(2)}</Text>
-            <Text style={styles.statLabel}>All Time</Text>
-          </View>
+          {[
+            { icon: 'calendar-outline' as const, value: thisMonthEarnings, label: now.toLocaleDateString(undefined, { month: 'long' }), color: COLORS.primary },
+            { icon: 'time-outline' as const, value: lastMonthEarnings, label: 'Last month', color: '#6366f1' },
+            { icon: 'trending-up-outline' as const, value: totalEarnings, label: 'All time', color: COLORS.secondary },
+          ].map((s) => (
+            <View key={s.label} style={styles.statCard}>
+              <Ionicons name={s.icon} size={18} color={s.color} />
+              <Text style={styles.statValue}>{'£'}{s.value.toFixed(2)}</Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
+            </View>
+          ))}
         </View>
 
-        {bookings.length > 0 && (
-          <MiniBarChart data={chartData.data} labels={chartData.labels} />
+        {bookings.length > 0 && <MiniBarChart data={chart.data} labels={chart.labels} />}
+
+        <SectionTitle>This week's jobs</SectionTitle>
+        {weekJobs.length === 0 ? (
+          <EmptyState icon="briefcase-outline" title="No completed jobs this week" body="Finished jobs show up here with your pay." />
+        ) : (
+          <Card style={{ paddingVertical: 4 }}>
+            {weekJobs.map((j, i) => (
+              <View key={j.id} style={[styles.row, i < weekJobs.length - 1 && styles.rowBorder]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle} numberOfLines={1}>
+                    {j.customer || 'Client'}
+                  </Text>
+                  <Text style={styles.rowMeta}>
+                    {shortDate(j.date)} · {Number(j.yourHours).toFixed(2)}h × {'£'}
+                    {Number(j.hourlyRate).toFixed(2)}
+                    {j.staffCount > 1 ? ` · team of ${j.staffCount}` : ''}
+                  </Text>
+                </View>
+                <Text style={styles.rowAmount}>{'£'}{Number(j.yourShare).toFixed(2)}</Text>
+              </View>
+            ))}
+          </Card>
         )}
 
-        <Text style={styles.sectionTitle}>Recent Jobs</Text>
-        {bookings.slice(0, 10).map((booking) => (
-          <View key={booking.id} style={styles.jobCard}>
-            <View style={styles.jobLeft}>
-              <Text style={styles.jobService}>{booking.serviceType.replace(/_/g, ' ')}</Text>
-              <Text style={styles.jobDate}>
-                {new Date(booking.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} at {booking.time}
-              </Text>
-            </View>
-            <Text style={styles.jobAmount}>{'£'}{Number(booking.totalPrice).toFixed(2)}</Text>
-          </View>
-        ))}
-
-        {bookings.length === 0 && (
-          <View style={styles.empty}>
-            <Ionicons name="wallet-outline" size={48} color={COLORS.textTertiary} />
-            <Text style={styles.emptyText}>No earnings yet</Text>
-          </View>
-        )}
-
-        {staff && (
-          <TouchableOpacity
-            style={[styles.invoiceBtn, submittingInvoice && styles.invoiceBtnDisabled]}
-            onPress={handleSubmitInvoice}
-            disabled={submittingInvoice}
-          >
-            {submittingInvoice ? (
-              <Text style={styles.invoiceBtnText}>Submitting...</Text>
-            ) : (
-              <>
-                <Ionicons name="document-text-outline" size={18} color={COLORS.white} />
-                <Text style={styles.invoiceBtnText}>Submit Weekly Invoice</Text>
-              </>
-            )}
-          </TouchableOpacity>
+        <SectionTitle>Recent completed jobs</SectionTitle>
+        {bookings.length === 0 ? (
+          <EmptyState icon="wallet-outline" title="No earnings yet" body="Your pay appears here once you complete a job." />
+        ) : (
+          <Card style={{ paddingVertical: 4 }}>
+            {bookings.slice(0, 10).map((b, i, arr) => {
+              const { hours, pay } = jobPay(b, rate);
+              return (
+                <View key={b.id} style={[styles.row, i < arr.length - 1 && styles.rowBorder]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>
+                      {b.contact?.name || String(b.serviceType).replace(/_/g, ' ')}
+                    </Text>
+                    <Text style={styles.rowMeta}>
+                      {shortDate(b.date)} · {hours.toFixed(2)}h
+                    </Text>
+                  </View>
+                  <Text style={styles.rowAmount}>{'£'}{pay.toFixed(2)}</Text>
+                </View>
+              );
+            })}
+          </Card>
         )}
 
         {invoices.length > 0 && (
           <>
-            <Text style={[styles.sectionTitle, { marginTop: SPACING.lg }]}>Invoice History</Text>
-            {invoices.map((inv) => {
-              const statusColor = inv.status === 'Paid' ? COLORS.secondary : inv.status === 'Approved' ? COLORS.primary : COLORS.accentGold;
-              return (
-                <View key={inv.id} style={styles.invoiceCard}>
-                  <View style={styles.invoiceLeft}>
-                    <Text style={styles.invoiceWeek}>{inv.weekLabel}</Text>
-                    <Text style={styles.invoiceMeta}>
-                      {inv.weekJobCount || 0} jobs{inv.weekTotalHours ? ` · ${inv.weekTotalHours}h` : ''}
+            <SectionTitle>Submitted invoices</SectionTitle>
+            {invoices.map((inv) => (
+              <Card key={inv.id} style={{ marginBottom: SPACING.sm }}>
+                <View style={styles.invoiceTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{inv.weekLabel}</Text>
+                    <Text style={styles.rowMeta}>
+                      {inv.weekJobCount || 0} jobs{inv.weekTotalHours ? ` · ${Number(inv.weekTotalHours).toFixed(2)}h` : ''}
                     </Text>
                   </View>
-                  <View style={styles.invoiceRight}>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     <Text style={styles.invoiceAmount}>{'£'}{Number(inv.totalAmount).toFixed(2)}</Text>
-                    <View style={[styles.invoiceStatusBadge, { backgroundColor: statusColor + '18' }]}>
-                      <Text style={[styles.invoiceStatusText, { color: statusColor }]}>{inv.status}</Text>
-                    </View>
+                    <StatusBadge status={inv.status} />
                   </View>
                 </View>
-              );
-            })}
+                {inv.adminNotes ? (
+                  <View style={styles.note}>
+                    <Text style={styles.noteLabel}>Note from the office</Text>
+                    <Text style={styles.noteText}>{inv.adminNotes}</Text>
+                  </View>
+                ) : null}
+              </Card>
+            ))}
           </>
         )}
 
@@ -290,60 +294,56 @@ export default function EarningsScreen() {
 }
 
 const chartStyles = StyleSheet.create({
-  container: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.base,
-    marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
   title: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.md },
-  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.xs, height: 120 },
+  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.xs, height: 130 },
   barCol: { flex: 1, alignItems: 'center' },
-  barTrack: {
-    width: '70%',
-    height: 80,
-    backgroundColor: COLORS.borderLight,
-    borderRadius: RADIUS.sm,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-  },
+  barTrack: { width: '62%', height: 84, backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.sm, justifyContent: 'flex-end', overflow: 'hidden' },
   barFill: { width: '100%', borderRadius: RADIUS.sm },
-  barLabel: { fontSize: 9, color: COLORS.textTertiary, marginTop: 4, fontWeight: '600' },
-  barValue: { fontSize: 8, color: COLORS.primary, fontWeight: '700', marginTop: 1 },
+  barLabel: { fontSize: 10, color: COLORS.textTertiary, marginTop: 4, fontWeight: '600' },
+  barValue: { fontSize: 9, color: COLORS.textSecondary, fontWeight: '700', marginBottom: 3 },
 });
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  logoRow: { alignItems: 'center', paddingTop: SPACING.sm, paddingBottom: SPACING.xs },
-  headerLogo: { width: 140, height: 45 },
   scroll: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: SPACING.lg,
-    marginBottom: SPACING.lg,
+  rate: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+    backgroundColor: COLORS.primary + '12',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
   },
-  title: { fontSize: 24, fontWeight: '700', color: COLORS.text },
-  rate: { fontSize: 14, fontWeight: '600', color: COLORS.primary, backgroundColor: COLORS.primary + '12', paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full },
-  mainCard: {
-    backgroundColor: COLORS.primary,
+  hero: {
+    backgroundColor: COLORS.secondary,
     borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    shadowColor: COLORS.primary,
+    padding: SPACING.lg,
+    marginBottom: SPACING.base,
+    overflow: 'hidden',
+    shadowColor: COLORS.secondary,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    elevation: 5,
   },
-  mainLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: 1 },
-  mainValue: { fontSize: 36, fontWeight: '800', color: COLORS.white, marginVertical: 4 },
-  mainSub: { fontSize: 13, color: 'rgba(255,255,255,0.6)' },
-  statsRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg },
+  heroGlow: { position: 'absolute', right: -40, top: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(255,255,255,0.12)' },
+  heroLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.9)' },
+  heroValue: { fontSize: 36, fontWeight: '700', color: COLORS.white, marginTop: 4, letterSpacing: -0.5 },
+  heroSub: { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  heroBtn: {
+    marginTop: SPACING.base,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    paddingVertical: 13,
+  },
+  heroBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.secondary },
+  statsRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.base },
   statCard: {
     flex: 1,
     backgroundColor: COLORS.surface,
@@ -352,63 +352,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.border + '80',
   },
   statValue: { fontSize: 15, fontWeight: '700', color: COLORS.text },
-  statLabel: { fontSize: 10, fontWeight: '600', color: COLORS.textTertiary },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.md },
-  jobCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.base,
-    paddingVertical: 12,
-    marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  jobLeft: {},
-  jobService: { fontSize: 14, fontWeight: '600', color: COLORS.text, textTransform: 'capitalize' },
-  jobDate: { fontSize: 12, color: COLORS.textTertiary, marginTop: 2 },
-  jobAmount: { fontSize: 16, fontWeight: '700', color: COLORS.primary },
-  empty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.xxxl * 2,
-    gap: SPACING.sm,
-  },
-  emptyText: { fontSize: 15, color: COLORS.textSecondary },
-  invoiceBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.secondary,
-    borderRadius: RADIUS.md,
-    paddingVertical: 14,
-    marginTop: SPACING.lg,
-  },
-  invoiceBtnDisabled: { opacity: 0.6 },
-  invoiceBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
-  invoiceCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.base,
-    paddingVertical: 12,
-    marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  invoiceLeft: {},
-  invoiceWeek: { fontSize: 14, fontWeight: '600', color: COLORS.text },
-  invoiceMeta: { fontSize: 12, color: COLORS.textTertiary, marginTop: 2 },
-  invoiceRight: { alignItems: 'flex-end' },
+  statLabel: { fontSize: 11, color: COLORS.textSecondary },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: 12 },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  rowTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text },
+  rowMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  rowAmount: { fontSize: 15, fontWeight: '700', color: COLORS.secondary },
+  invoiceTop: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   invoiceAmount: { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  invoiceStatusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: RADIUS.sm, marginTop: 4 },
-  invoiceStatusText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+  note: { marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceAlt },
+  noteLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary },
+  noteText: { fontSize: 14, color: COLORS.text, marginTop: 2 },
 });

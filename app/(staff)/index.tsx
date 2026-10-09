@@ -1,17 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  Linking,
-  Platform,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { staffApi } from '../../services/api';
@@ -20,7 +9,8 @@ import { StatsSkeleton, ListSkeleton } from '../../components/SkeletonLoader';
 import { useHaptic } from '../../hooks/useHaptic';
 import { AnimatedListItem } from '../../components/AnimatedListItem';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
-import type { Booking } from '../../types';
+import { BrandBar, EmptyState, IconAction, JobCard, NextJobCard, ScreenHeader, findMe, jobPay, localYmd } from '../../components/staff/StaffKit';
+import type { Booking, Staff } from '../../types';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -37,24 +27,28 @@ export default function StaffSchedule() {
   const { showToast } = useToast();
   const haptic = useHaptic();
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [me, setMe] = useState<Staff | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<DayFilter>('today');
 
   const firstName = (user?.name || '').split(' ')[0] || 'there';
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = localYmd();
 
   const fetchBookings = useCallback(async () => {
     try {
-      const data = await staffApi.getBookings();
+      const [data, staffList] = await Promise.all([staffApi.getBookings(), staffApi.getStaffList().catch(() => [] as Staff[])]);
       setBookings(data.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)));
+      setMe(findMe(staffList, user));
     } catch {
       showToast('Could not load schedule', 'error');
     }
     setLoading(false);
-  }, []);
+  }, [user]);
 
-  useEffect(() => { fetchBookings(); }, [fetchBookings]);
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -68,15 +62,90 @@ export default function StaffSchedule() {
     if (filter === 'upcoming') return b.date > todayStr;
     return b.date < todayStr && b.status === 'Completed';
   });
+  const shown = filter === 'past' ? [...filtered].reverse() : filtered;
 
+  const isOpen = (b: Booking) => b.status === 'Pending' || b.status === 'Confirmed';
+  const nextJob = bookings.find((b) => isOpen(b) && b.date >= todayStr) ?? null;
   const todayCount = bookings.filter((b) => b.date === todayStr && b.status !== 'Cancelled').length;
+  const upcomingCount = bookings.filter((b) => b.date > todayStr && b.status !== 'Cancelled').length;
+  const doneCount = bookings.filter((b) => b.status === 'Completed').length;
+
+  const openDirections = (booking: Booking) => {
+    const addr = `${booking.address?.line1}, ${booking.address?.postcode}`;
+    const url = Platform.OS === 'ios' ? `maps:?daddr=${encodeURIComponent(addr)}` : `geo:0,0?q=${encodeURIComponent(addr)}`;
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`);
+    });
+  };
+
+  const header = (
+    <View>
+      <BrandBar />
+      <View style={styles.greetRow}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.greeting}>
+            {getGreeting()}, {firstName}
+          </Text>
+          <View style={styles.statusRow}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>On duty</Text>
+            <Text style={styles.dateSep}>·</Text>
+            <Text style={styles.dateText}>{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScreenHeader title="My schedule" subtitle="Your jobs for today and the days ahead." />
+
+      {nextJob ? (
+        <View style={{ marginBottom: SPACING.base }}>
+          <NextJobCard booking={nextJob} onPress={() => router.push(`/booking/${nextJob.id}`)} />
+        </View>
+      ) : null}
+
+      <View style={styles.statsRow}>
+        {[
+          { n: todayCount, label: 'Today', color: COLORS.primary },
+          { n: upcomingCount, label: 'Upcoming', color: COLORS.text },
+          { n: doneCount, label: 'Completed', color: COLORS.secondary },
+        ].map((s) => (
+          <View key={s.label} style={styles.statCard}>
+            <Text style={[styles.statNum, { color: s.color }]}>{s.n}</Text>
+            <Text style={styles.statLabel}>{s.label}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.segment}>
+        {[
+          { key: 'today' as const, label: 'Today' },
+          { key: 'upcoming' as const, label: 'Upcoming' },
+          { key: 'past' as const, label: 'Past' },
+        ].map((f) => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.segmentBtn, filter === f.key && styles.segmentBtnActive]}
+            onPress={() => {
+              haptic.light();
+              setFilter(f.key);
+            }}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: filter === f.key }}
+          >
+            <Text style={[styles.segmentText, filter === f.key && styles.segmentTextActive]}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.logoRow}>
-          <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        </View>
+        <BrandBar />
         <StatsSkeleton />
         <ListSkeleton count={3} type="card" />
       </SafeAreaView>
@@ -85,139 +154,37 @@ export default function StaffSchedule() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.logoRow}>
-        <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-      </View>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
-          </View>
-          <View>
-            <Text style={styles.greeting}>{getGreeting()}, {firstName}</Text>
-            <View style={styles.statusRow}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>On Duty</Text>
-              <Text style={styles.dateSep}>{'·'}</Text>
-              <Text style={styles.dateText}>
-                {new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Stats */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>{todayCount}</Text>
-          <Text style={styles.statLabel}>Today</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>
-            {bookings.filter((b) => b.date > todayStr && b.status !== 'Cancelled').length}
-          </Text>
-          <Text style={styles.statLabel}>Upcoming</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>
-            {bookings.filter((b) => b.status === 'Completed').length}
-          </Text>
-          <Text style={styles.statLabel}>Done</Text>
-        </View>
-      </View>
-
-      {/* Filters */}
-      <View style={styles.filterRow}>
-        {([
-          { key: 'today' as const, label: 'Today' },
-          { key: 'upcoming' as const, label: 'Upcoming' },
-          { key: 'past' as const, label: 'Past' },
-        ]).map((f) => (
-          <TouchableOpacity
-            key={f.key}
-            style={[styles.filterBtn, filter === f.key && styles.filterBtnActive]}
-            onPress={() => { haptic.light(); setFilter(f.key); }}
-          >
-            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>{f.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Job List */}
       <FlatList
-        data={filtered}
+        data={shown}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={header}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="calendar-outline" size={48} color={COLORS.textTertiary} />
-            <Text style={styles.emptyText}>
-              {filter === 'today' ? 'No jobs today' : filter === 'upcoming' ? 'No upcoming jobs' : 'No past jobs'}
-            </Text>
-          </View>
+          <EmptyState
+            icon="calendar-outline"
+            title={filter === 'today' ? 'Nothing booked today' : filter === 'upcoming' ? 'No upcoming jobs' : 'No past jobs yet'}
+            body={filter === 'past' ? 'Completed jobs will appear here.' : 'New jobs appear here as soon as the office assigns them to you.'}
+          />
         }
         renderItem={({ item: booking, index }) => (
           <AnimatedListItem index={index}>
-          <TouchableOpacity style={styles.jobCard} activeOpacity={0.7} onPress={() => router.push(`/booking/${booking.id}`)}>
-            <View style={styles.jobHeader}>
-              <View style={styles.timeBadge}>
-                <Ionicons name="time-outline" size={14} color={COLORS.primary} />
-                <Text style={styles.timeText}>{booking.time}</Text>
-              </View>
-              <View style={[styles.statusBadge, { backgroundColor: booking.status === 'Completed' ? COLORS.status.completedBg : COLORS.status.confirmedBg }]}>
-                <Text style={[styles.statusBadgeText, { color: booking.status === 'Completed' ? COLORS.status.completed : COLORS.status.confirmed }]}>
-                  {booking.status}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.jobService}>{booking.serviceType.replace(/_/g, ' ')}</Text>
-
-            <View style={styles.jobDetails}>
-              <View style={styles.jobDetail}>
-                <Ionicons name="person-outline" size={14} color={COLORS.textTertiary} />
-                <Text style={styles.jobDetailText}>{booking.contact?.name}</Text>
-              </View>
-              <View style={styles.jobDetail}>
-                <Ionicons name="location-outline" size={14} color={COLORS.textTertiary} />
-                <Text style={styles.jobDetailText} numberOfLines={1}>
-                  {booking.address?.line1}, {booking.address?.postcode}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.jobFooter}>
-              <Text style={styles.jobPrice}>{'£'}{Number(booking.totalPrice).toFixed(2)}</Text>
-              <View style={styles.jobActions}>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => {
-                    const addr = `${booking.address?.line1}, ${booking.address?.postcode}`;
-                    const url = Platform.OS === 'ios'
-                      ? `maps:?daddr=${encodeURIComponent(addr)}`
-                      : `geo:0,0?q=${encodeURIComponent(addr)}`;
-                    Linking.openURL(url).catch(() => {
-                      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`);
-                    });
-                  }}
-                >
-                  <Ionicons name="navigate-outline" size={16} color={COLORS.primary} />
-                </TouchableOpacity>
-                {booking.contact?.phone && (
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => Linking.openURL(`tel:${booking.contact!.phone}`)}
-                  >
-                    <Ionicons name="call-outline" size={16} color={COLORS.primary} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </TouchableOpacity>
+            <JobCard
+              booking={booking}
+              pay={me ? jobPay(booking, me.hourlyRate) : null}
+              onPress={() => router.push(`/booking/${booking.id}`)}
+              actions={
+                booking.status !== 'Completed' ? (
+                  <>
+                    <IconAction icon="navigate-outline" label="Directions" onPress={() => openDirections(booking)} />
+                    {booking.contact?.phone ? (
+                      <IconAction icon="call-outline" label="Call client" onPress={() => Linking.openURL(`tel:${booking.contact!.phone}`)} />
+                    ) : null}
+                  </>
+                ) : null
+              }
+            />
           </AnimatedListItem>
         )}
       />
@@ -227,126 +194,40 @@ export default function StaffSchedule() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  logoRow: { alignItems: 'center', paddingTop: SPACING.sm, paddingBottom: SPACING.xs },
-  headerLogo: { width: 140, height: 45 },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.md,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  list: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },
+  greetRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingTop: SPACING.md },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' },
   avatarText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
-  greeting: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  greeting: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' },
-  statusText: { fontSize: 12, fontWeight: '600', color: '#22c55e' },
+  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.secondary },
+  statusText: { fontSize: 12, fontWeight: '600', color: COLORS.secondary },
   dateSep: { color: COLORS.textTertiary, fontSize: 12 },
-  dateText: { fontSize: 12, color: COLORS.textTertiary },
+  dateText: { fontSize: 12, color: COLORS.textSecondary },
 
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: SPACING.lg,
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
-  },
+  statsRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.base },
   statCard: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  statNum: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
-  statLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textTertiary, marginTop: 2 },
-
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: SPACING.lg,
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  filterBtn: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  filterBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
-  filterTextActive: { color: COLORS.white },
-
-  list: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },
-
-  jobCard: {
-    backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
-    padding: SPACING.base,
-    marginBottom: SPACING.sm,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.border + '80',
   },
-  jobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  timeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primary + '12',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: RADIUS.sm,
-  },
-  timeText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.sm },
-  statusBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
-  jobService: { fontSize: 16, fontWeight: '600', color: COLORS.text, textTransform: 'capitalize', marginBottom: SPACING.sm },
-  jobDetails: { gap: 6, marginBottom: SPACING.sm },
-  jobDetail: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  jobDetailText: { fontSize: 13, color: COLORS.textSecondary, flex: 1 },
-  jobFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: SPACING.sm,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
-  },
-  jobPrice: { fontSize: 17, fontWeight: '700', color: COLORS.text },
-  jobActions: { flexDirection: 'row', gap: SPACING.sm },
-  actionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.primary + '12',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  statNum: { fontSize: 22, fontWeight: '700' },
+  statLabel: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
-  empty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.xxxl * 2,
-    gap: SPACING.sm,
+  segment: { flexDirection: 'row', backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.md, padding: 4, marginBottom: SPACING.md },
+  segmentBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: RADIUS.sm },
+  segmentBtnActive: {
+    backgroundColor: COLORS.surface,
+    shadowColor: '#0c1f33',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  emptyText: { fontSize: 15, color: COLORS.textSecondary },
+  segmentText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
+  segmentTextActive: { color: COLORS.text },
 });

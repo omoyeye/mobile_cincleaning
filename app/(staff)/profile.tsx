@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { staffApi, authApi } from '../../services/api';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { BrandBar } from '../../components/staff/StaffKit';
 import type { Staff, Referral } from '../../types';
 
 interface MenuItem {
@@ -166,9 +167,7 @@ export default function StaffProfileScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.logoRow}>
-          <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        </View>
+        <BrandBar />
         {/* Profile card */}
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
