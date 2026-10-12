@@ -11,20 +11,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBack } from '../utils/navigation';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { useBusinessContact } from '../hooks/useBusinessContact';
 
 const FAQ = [
   {
     q: 'How do I book a clean?',
-    a: 'Tap "Book a Clean" from the home screen, choose your service type, select a date and time, enter your property details, and confirm. No account needed for guest bookings.',
+    a: 'Tap "Book a clean" on the home screen, choose your service, tell us about your property, pick a date and time, and confirm. You see the price before you book.',
   },
   {
     q: 'Can I cancel a booking?',
-    a: 'Yes. Open your booking and tap "Cancel Booking". Cancellations within 24 hours of the scheduled time may incur a short-notice fee.',
+    a: 'Yes. Open your booking and tap "Cancel Booking". Cancelling within 24 hours of the start time may mean a short-notice fee.',
   },
   {
     q: 'How do I change my booking date or time?',
-    a: 'Contact us directly via email or phone and we\'ll reschedule your booking at no extra charge, subject to availability.',
+    a: 'Open your booking and tap "Reschedule". You can move it yourself up to 24 hours before it starts. Closer than that, call or message us and we will do our best to help.',
   },
   {
     q: 'How are cleaners vetted?',
@@ -43,11 +45,12 @@ const FAQ = [
 export default function HelpScreen() {
   const router = useRouter();
   const [expanded, setExpanded] = React.useState<number | null>(null);
+  const contact = useBusinessContact();
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
         <Image source={require('../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
@@ -66,21 +69,34 @@ export default function HelpScreen() {
           <View style={styles.contactRow}>
             <TouchableOpacity
               style={styles.contactBtn}
-              onPress={() => Linking.openURL('mailto:info@cleanitneatly.com')}
+              onPress={() => Linking.openURL(`mailto:${contact.email}`)}
             >
               <Ionicons name="mail-outline" size={20} color={COLORS.white} />
               <Text style={styles.contactBtnText}>Email Us</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.contactBtn, styles.contactBtnOutline]}
-              onPress={() => Linking.openURL('tel:+442012345678')}
+              onPress={() => Linking.openURL(`tel:${contact.phone.replace(/\s/g, '')}`)}
             >
               <Ionicons name="call-outline" size={20} color={COLORS.primary} />
               <Text style={styles.contactBtnTextOutline}>Call Us</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.contactEmail}>info@cleanitneatly.com</Text>
+          {contact.whatsapp ? (
+            <TouchableOpacity
+              style={styles.whatsappBtn}
+              onPress={() => Linking.openURL(`https://wa.me/${contact.whatsapp}`)}
+              accessibilityLabel="Message us on WhatsApp"
+            >
+              <Ionicons name="logo-whatsapp" size={20} color={COLORS.white} />
+              <Text style={styles.contactBtnText}>WhatsApp us</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <Text style={styles.contactEmail}>
+            {contact.phone} · {contact.email}
+          </Text>
         </View>
 
         {/* FAQ */}
@@ -123,6 +139,17 @@ export default function HelpScreen() {
 }
 
 const styles = StyleSheet.create({
+  whatsappBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    alignSelf: 'stretch',
+    backgroundColor: '#25D366',
+    borderRadius: RADIUS.md,
+    minHeight: 48,
+    marginTop: SPACING.sm,
+  },
   safe: { flex: 1, backgroundColor: COLORS.background },
   header: {
     flexDirection: 'row',

@@ -14,7 +14,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBack } from '../utils/navigation';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { useAuth } from '../contexts/AuthContext';
+import { authApi } from '../services/api';
+import { useToast } from '../components/Toast';
 
 let Notifications: typeof import('expo-notifications') | null = null;
 try { Notifications = require('expo-notifications'); } catch {}
@@ -22,7 +26,27 @@ try { Notifications = require('expo-notifications'); } catch {}
 export default function NotificationSettingsScreen() {
   const router = useRouter();
   const [permitted, setPermitted] = useState<boolean | null>(null);
-  const [marketingConsent, setMarketingConsent] = useState(false);
+  const { user, refreshUser } = useAuth();
+  const { showToast } = useToast();
+  const [marketingConsent, setMarketingConsent] = useState(!!user?.marketingOptIn);
+
+  useEffect(() => {
+    setMarketingConsent(!!user?.marketingOptIn);
+  }, [user?.marketingOptIn]);
+
+  /** Saved on the account (the website reads the same setting). */
+  const saveMarketing = async (next: boolean) => {
+    if (!user) return;
+    setMarketingConsent(next);
+    try {
+      await authApi.updateProfile(user.id, { marketingOptIn: next });
+      await refreshUser();
+      showToast(next ? 'You will hear about offers and news' : 'Marketing messages turned off', 'success');
+    } catch (err) {
+      setMarketingConsent(!next);
+      showToast(err instanceof Error ? err.message : 'Could not save your choice', 'error');
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -72,7 +96,7 @@ export default function NotificationSettingsScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
         <Image source={require('../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
@@ -135,7 +159,7 @@ export default function NotificationSettingsScreen() {
             <Text style={styles.toggleLabel}>Promotions & Offers</Text>
             <Switch
               value={marketingConsent}
-              onValueChange={setMarketingConsent}
+              onValueChange={saveMarketing}
               trackColor={{ false: COLORS.borderLight, true: COLORS.primary + '60' }}
               thumbColor={marketingConsent ? COLORS.primary : COLORS.textTertiary}
               accessibilityLabel="Toggle marketing communications consent"

@@ -1,6 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authApi, setToken, clearToken, getToken } from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authApi, pushApi, setToken, clearToken, getToken, ApiError } from '../services/api';
+import { stopLiveTracking } from '../services/liveTracking';
 import type { UserAccount } from '../types';
+
+/** Last signed-in user, so the app still opens with no signal instead of logging people out. */
+const USER_CACHE_KEY = 'cin_user_cache';
+/** Set by usePushNotifications; removed from the server on logout so a shared phone stops getting alerts. */
+export const PUSH_TOKEN_KEY = 'cin_push_token';
+
+async function cacheUser(user: UserAccount | null) {
+  try {
+    if (user) await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    else await AsyncStorage.removeItem(USER_CACHE_KEY);
+  } catch {}
+}
 
 interface AuthState {
   user: UserAccount | null;
@@ -32,10 +46,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const user = await authApi.me();
+      cacheUser(user);
       setState({ user, loading: false, error: null });
-    } catch {
-      await clearToken();
-      setState({ user: null, loading: false, error: null });
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : 0;
+      if (status === 401 || status === 403) {
+        // Session expired or account removed: sign out properly.
+        await clearToken();
+        await cacheUser(null);
+        setState({ user: null, loading: false, error: null });
+        return;
+      }
+      // Offline or server busy: keep the session and use the last known profile.
+      let cached: UserAccount | null = null;
+      try {
+        const raw = await AsyncStorage.getItem(USER_CACHE_KEY);
+        cached = raw ? (JSON.parse(raw) as UserAccount) : null;
+      } catch {}
+      setState({ user: cached, loading: false, error: null });
     }
   }, []);
 
@@ -48,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { user, token } = await authApi.login(email, password);
       await setToken(token);
+      cacheUser(user);
       setState({ user, loading: false, error: null });
     } catch (err) {
       setState((s) => ({
@@ -65,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { user, token } = await authApi.register(data);
         await setToken(token);
+        cacheUser(user);
         setState({ user, loading: false, error: null });
       } catch (err) {
         setState((s) => ({
@@ -79,7 +109,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    try {
+      const pushToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+      if (pushToken) {
+        await pushApi.unregisterToken(pushToken).catch(() => {});
+        await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
+      }
+    } catch {}
+    await stopLiveTracking();
     await authApi.logout();
+    await cacheUser(null);
     setState({ user: null, loading: false, error: null });
   }, []);
 

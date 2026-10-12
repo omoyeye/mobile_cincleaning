@@ -7,22 +7,14 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { authApi } from '../../services/api';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
-
-interface MenuItem {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  sub?: string;
-  onPress?: () => void;
-  danger?: boolean;
-}
+import { COLORS, SPACING, RADIUS, APP_VERSION } from '../../constants/config';
+import { TopBar, Avatar, RowGroup, ListRow } from '../../components/ClientKit';
 
 export default function AccountScreen() {
   const { user, logout } = useAuth();
@@ -56,7 +48,7 @@ export default function AccountScreen() {
           onPress: () => {
             Alert.alert(
               'Final Confirmation',
-              'All your bookings, messages, and personal data will be permanently erased within 30 days as required by UK GDPR. Type your email to confirm.',
+              'All your bookings, messages and personal data will be permanently erased within 30 days, as required by UK GDPR. This cannot be undone.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -73,7 +65,7 @@ export default function AccountScreen() {
                       );
                       await logout();
                     } catch {
-                      Alert.alert('Error', 'Could not process your request. Please email info@cleanitneatly.com to request account deletion.');
+                      Alert.alert('Error', 'Could not process your request. Please email support@cleanitneatly.com to request account deletion.');
                     }
                   },
                 },
@@ -99,7 +91,7 @@ export default function AccountScreen() {
               await authApi.requestDataExport(user.id);
               Alert.alert('Request Submitted', 'You will receive your data export via email within 30 days.');
             } catch {
-              Alert.alert('Error', 'Could not process your request. Please email info@cleanitneatly.com to make a Subject Access Request.');
+              Alert.alert('Error', 'Could not process your request. Please email support@cleanitneatly.com to make a Subject Access Request.');
             }
           },
         },
@@ -107,99 +99,75 @@ export default function AccountScreen() {
     );
   };
 
-  const sections: { title: string; items: MenuItem[] }[] = [
-    {
-      title: 'Account',
-      items: [
-        { icon: 'person-outline', label: 'Personal Details', sub: user?.email, onPress: () => router.push('/edit-profile') },
-        { icon: 'location-outline', label: 'Saved Addresses', onPress: () => router.push('/edit-profile') },
-        { icon: 'card-outline', label: 'Payment Methods', sub: 'Managed via payment links', onPress: () => Alert.alert('Payment Methods', 'Payments are handled securely through Stripe payment links sent with your booking confirmation. No card details are stored in the app.') },
-      ],
-    },
-    {
-      title: 'Preferences',
-      items: [
-        { icon: 'notifications-outline', label: 'Notification Settings', onPress: () => router.push('/notification-settings') },
-        { icon: 'star-outline', label: 'Leave a Review', onPress: () => router.push('/(customer)/bookings') },
-        { icon: 'share-outline', label: 'Refer a Friend', sub: 'Earn rewards', onPress: () => router.push('/referrals') },
-      ],
-    },
-    {
-      title: 'Support',
-      items: [
-        { icon: 'chatbubble-ellipses-outline', label: 'Help & Support', onPress: () => router.push('/help') },
-        { icon: 'document-text-outline', label: 'Terms, Privacy & Cookies', onPress: () => router.push('/terms') },
-      ],
-    },
-    {
-      title: 'Your Data (GDPR)',
-      items: [
-        { icon: 'download-outline', label: 'Download My Data', sub: 'Subject Access Request', onPress: handleDownloadData },
-        { icon: 'trash-outline', label: 'Delete My Account', sub: 'Permanently erase all data', onPress: handleDeleteAccount, danger: true },
-      ],
-    },
-  ];
+  const points = Number(user?.loyaltyPoints || 0);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.logoRow}>
-          <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        </View>
+        <TopBar />
+
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
-          </View>
+          <Avatar name={user?.name} size={56} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{user?.name}</Text>
-            <Text style={styles.email}>{user?.email}</Text>
+            <Text style={styles.name} numberOfLines={1}>{user?.name || firstName}</Text>
+            <Text style={styles.email} numberOfLines={1}>{user?.email}</Text>
+            {points > 0 ? (
+              <View style={styles.pointsPill}>
+                <Ionicons name="diamond" size={12} color={COLORS.accentGold} />
+                <Text style={styles.pointsText}>{points} points</Text>
+              </View>
+            ) : null}
           </View>
-          <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/edit-profile')}>
+          <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/edit-profile')} accessibilityLabel="Edit profile">
             <Ionicons name="create-outline" size={18} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
 
-        {sections.map((section) => (
-          <View key={section.title} style={styles.section}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            <View style={styles.sectionCard}>
-              {section.items.map((item, i) => (
-                <TouchableOpacity
-                  key={item.label}
-                  style={[styles.menuItem, i < section.items.length - 1 && styles.menuItemBorder]}
-                  activeOpacity={0.6}
-                  onPress={item.onPress}
-                >
-                  <View style={styles.menuLeft}>
-                    <View style={[styles.menuIcon, item.danger && { backgroundColor: '#fef2f2' }]}>
-                      <Ionicons name={item.icon} size={18} color={item.danger ? '#ef4444' : COLORS.textSecondary} />
-                    </View>
-                    <View>
-                      <Text style={[styles.menuLabel, item.danger && { color: '#ef4444' }]}>
-                        {item.label}
-                      </Text>
-                      {item.sub && <Text style={styles.menuSub}>{item.sub}</Text>}
-                    </View>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={COLORS.textTertiary} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        ))}
+        <RowGroup title="Your account">
+          <ListRow icon="person-outline" title="Personal details" subtitle="Name, phone and email" onPress={() => router.push('/edit-profile')} />
+          <ListRow icon="location-outline" title="Saved address" subtitle="Where we clean" onPress={() => router.push('/edit-profile')} />
+          <ListRow icon="notifications-outline" tint="#6d52e8" title="Notifications" subtitle="Email, SMS and app alerts" onPress={() => router.push('/notification-settings')} last />
+        </RowGroup>
+
+        <RowGroup title="Bookings and payments">
+          <ListRow icon="receipt-outline" tint={COLORS.error} title="Invoices" subtitle="See and pay your invoices" onPress={() => router.push('/invoices')} />
+          <ListRow icon="chatbubbles-outline" tint="#6d52e8" title="Messages" subtitle="Chat with your cleaner" onPress={() => router.push('/messages')} last />
+        </RowGroup>
+
+        <RowGroup title="Rewards">
+          <ListRow icon="gift-outline" tint={COLORS.secondary} title="Refer a friend" subtitle="You both get money off" onPress={() => router.push('/referrals')} />
+          <ListRow
+            icon="star-outline"
+            tint={COLORS.accentGold}
+            title="Rate a clean"
+            subtitle="Open a completed booking to leave a review"
+            onPress={() => router.push('/(customer)/bookings')}
+            last
+          />
+        </RowGroup>
+
+        <RowGroup title="Help">
+          <ListRow icon="chatbubble-ellipses-outline" title="Help and support" subtitle="FAQs, call or message us" onPress={() => router.push('/help')} />
+          <ListRow icon="document-text-outline" tint={COLORS.textSecondary} title="Terms, privacy and cookies" onPress={() => router.push('/terms')} last />
+        </RowGroup>
+
+        <RowGroup title="Your data">
+          <ListRow icon="download-outline" tint={COLORS.textSecondary} title="Download my data" subtitle="We email you a copy" onPress={handleDownloadData} />
+          <ListRow icon="trash-outline" title="Delete my account" subtitle="Permanently erase your data" onPress={handleDeleteAccount} danger last />
+        </RowGroup>
 
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} disabled={loggingOut} activeOpacity={0.7}>
           {loggingOut ? (
-            <ActivityIndicator color="#ef4444" />
+            <ActivityIndicator color={COLORS.error} />
           ) : (
             <>
-              <Ionicons name="log-out-outline" size={18} color="#ef4444" />
-              <Text style={styles.logoutText}>Sign Out</Text>
+              <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
+              <Text style={styles.logoutText}>Sign out</Text>
             </>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.version}>CiN Cleaning v1.0.0</Text>
+        <Text style={styles.version}>CiN Cleaning v{APP_VERSION}</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -208,93 +176,54 @@ export default function AccountScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   scroll: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },
-  logoRow: { alignItems: 'center', paddingTop: SPACING.sm, paddingBottom: SPACING.xs },
-  headerLogo: { width: 140, height: 45 },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     padding: SPACING.base,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xl,
+    marginTop: SPACING.md,
     gap: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.border + '80',
+    shadowColor: '#0c1f33',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: { fontSize: 20, fontWeight: '700', color: COLORS.white },
-  name: { fontSize: 17, fontWeight: '700', color: COLORS.text },
-  email: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
-  editBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primary + '10',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  section: { marginBottom: SPACING.lg },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: SPACING.sm,
-    paddingHorizontal: SPACING.xs,
-  },
-  sectionCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    overflow: 'hidden',
-  },
-  menuItem: {
+  name: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  email: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
+  pointsPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.base,
-    paddingVertical: 14,
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.warningLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    marginTop: 6,
   },
-  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
-  menuLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 },
-  menuIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.surfaceAlt,
+  pointsText: { fontSize: 12, fontWeight: '700', color: '#a16207' },
+  editBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary + '12',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  menuLabel: { fontSize: 15, fontWeight: '500', color: COLORS.text },
-  menuSub: { fontSize: 12, color: COLORS.textTertiary, marginTop: 1 },
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
-    paddingVertical: 14,
+    minHeight: 52,
     borderRadius: RADIUS.lg,
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    marginTop: SPACING.sm,
+    backgroundColor: COLORS.errorLight,
+    marginTop: SPACING.xl,
   },
-  logoutText: { fontSize: 15, fontWeight: '600', color: '#ef4444' },
-  version: {
-    fontSize: 12,
-    color: COLORS.textTertiary,
-    textAlign: 'center',
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
-  },
+  logoutText: { fontSize: 16, fontWeight: '700', color: COLORS.error },
+  version: { fontSize: 12, color: COLORS.textTertiary, textAlign: 'center', marginTop: SPACING.lg, marginBottom: SPACING.md },
 });

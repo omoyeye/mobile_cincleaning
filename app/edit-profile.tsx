@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBack } from '../utils/navigation';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../services/api';
@@ -124,7 +125,7 @@ export default function EditProfileScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
         <Image source={require('../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />

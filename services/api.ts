@@ -9,7 +9,11 @@ import type {
   Referral,
   UserAccount,
   DiscountCode,
-  ChatMessage,
+  ChatThread,
+  CustomerInvoice,
+  PublicStaff,
+  PaymentEvidenceItem,
+  StaffPerformance,
   StaffInvoice,
   DirectMessage,
   BookingTracking,
@@ -17,6 +21,18 @@ import type {
 } from '../types';
 
 export { getToken, setToken, clearToken };
+
+/** Error from the API. `status` is 0 when the phone could not reach the server. */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** Long enough for photo uploads on a weak signal, short enough not to hang forever. */
+const REQUEST_TIMEOUT_MS = 45000;
 
 async function request<T>(
   path: string,
@@ -31,15 +47,26 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: options.signal ?? controller.signal,
+    });
+  } catch {
+    throw new ApiError('No connection. Check your signal and try again.', 0);
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(
-      (body as any)?.error || (body as any)?.message || `Request failed: ${res.status}`
+    throw new ApiError(
+      (body as any)?.error || (body as any)?.message || `Request failed: ${res.status}`,
+      res.status
     );
   }
 
@@ -152,7 +179,16 @@ export const bookingsApi = {
 
   getTracking: (id: number) => request<BookingTracking>(`/api/bookings/${id}/tracking`),
 
-  getChat: (id: number) => request<ChatMessage[]>(`/api/bookings/${id}/chat`),
+  /** Messages plus whether chat is open (older servers returned a bare list). */
+  getChat: async (id: number): Promise<ChatThread> => {
+    const data = await request<ChatThread | ChatThread['messages']>(`/api/bookings/${id}/chat`);
+    if (Array.isArray(data)) return { messages: data, chatClosedByAdmin: false, canChatNow: true };
+    return {
+      messages: Array.isArray(data?.messages) ? data.messages : [],
+      chatClosedByAdmin: !!data?.chatClosedByAdmin,
+      canChatNow: data?.canChatNow !== false,
+    };
+  },
 
   sendChat: (id: number, text: string) =>
     request(`/api/bookings/${id}/chat`, {
@@ -203,11 +239,31 @@ export const customerApi = {
 
   getReferrals: (userId: number) => request<Referral[]>(`/api/referrals?userId=${userId}`),
 
-  getStaffList: () => request<Pick<Staff, 'id' | 'name' | 'role' | 'status' | 'imageUrl'>[]>('/api/staff'),
+  getStaffList: () => request<PublicStaff[]>('/api/staff'),
+
+  /** Invoices the office has sent (drafts are hidden by the server). */
+  getInvoices: () => request<CustomerInvoice[]>('/api/my-invoices'),
+
+  /** Records that the client agreed to the deposit and payment terms on an existing booking. */
+  acknowledgeDepositTerms: (id: number) =>
+    request<{ depositTermsAcceptedAt?: string }>(`/api/bookings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ depositTermsAcknowledged: true }),
+    }),
+
+  /** Replaces the list of payment proofs on a booking (max 6). */
+  savePaymentEvidence: (id: number, items: PaymentEvidenceItem[]) =>
+    request<{ paymentFeeEvidence?: { items: PaymentEvidenceItem[] } }>(`/api/bookings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ paymentFeeEvidence: { items } }),
+    }),
 };
 
 // ─── Staff ──────────────────────────────────────────
 export const staffApi = {
+  /** Your own performance (same endpoint and numbers as the website staff portal). */
+  getMyPerformance: () => request<StaffPerformance>('/api/staff/me/performance'),
+
   getBookings: () => bookingsApi.getAll(),
   getBooking: (id: number) => bookingsApi.getOne(id),
 

@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBack } from '../utils/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { staffApi } from '../services/api';
 import { ListSkeleton } from '../components/SkeletonLoader';
@@ -72,7 +73,7 @@ export default function MyReviewsScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
         <Image source={require('../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />

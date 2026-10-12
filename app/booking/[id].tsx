@@ -18,12 +18,26 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '../../utils/navigation';
 import { useAuth } from '../../contexts/AuthContext';
-import { bookingsApi, staffApi, customerApi, mapsApi } from '../../services/api';
+import { bookingsApi, staffApi, customerApi, mapsApi, publicApi } from '../../services/api';
 import { useToast } from '../../components/Toast';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking, BookingTracking } from '../../types';
 import { distanceKm, formatClock, isTodayYmd, minutesAgo } from '../../utils/tracking';
+import { StatusBadge, friendlyDay, serviceLabel, money } from '../../components/ClientKit';
+import { AssignedCleaners, BookingPayments } from '../../components/BookingPayments';
+import { useBusinessContact } from '../../hooks/useBusinessContact';
+
+/** Where the booking is on its journey, for the step tracker at the top. */
+function journeyStep(b: Booking, enRouteAt: string | null, arrived: boolean): number {
+  if (b.status === 'Completed') return 4;
+  if (b.status === 'In Progress' || arrived) return 3;
+  if (enRouteAt) return 2;
+  if (b.status === 'Confirmed') return 1;
+  return 0;
+}
+const JOURNEY = ['Booked', 'Confirmed', 'On the way', 'Cleaning', 'Done'];
 
 /** Clients can move a booking up to this many hours before it starts (the server enforces the same rule). */
 const RESCHEDULE_NOTICE_HOURS = 24;
@@ -47,6 +61,35 @@ function getStatusColor(status: string) {
   }
 }
 
+function DetailRow({
+  icon,
+  label,
+  value,
+  action,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  action?: { label: string; onPress: () => void };
+}) {
+  return (
+    <View style={styles.detailRow}>
+      <View style={styles.detailIcon}>
+        <Ionicons name={icon} size={18} color={COLORS.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue}>{value}</Text>
+      </View>
+      {action ? (
+        <TouchableOpacity style={styles.detailAction} onPress={action.onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.detailActionText}>{action.label}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
@@ -66,6 +109,15 @@ export default function BookingDetailScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const { showToast } = useToast();
+  const [extraNames, setExtraNames] = useState<Record<number, string>>({});
+  const policy = useBusinessContact();
+
+  useEffect(() => {
+    publicApi
+      .getExtras()
+      .then((list) => setExtraNames(Object.fromEntries(list.map((e) => [e.id, e.name]))))
+      .catch(() => {});
+  }, []);
 
   const fetchBooking = useCallback(async () => {
     if (!id) return;
@@ -118,28 +170,29 @@ export default function BookingDetailScreen() {
     setRefreshing(false);
   };
 
-  const isShortNotice = (bookingDate: string, bookingTime: string) => {
-    const dt = new Date(`${bookingDate}T${bookingTime}`);
-    return dt.getTime() - Date.now() < 24 * 60 * 60 * 1000;
-  };
-
   const handleCancel = () => {
     if (!booking) return;
-    const shortNotice = isShortNotice(booking.date, booking.time);
+    const shortNotice = hoursUntil(booking.date, booking.time) < policy.shortNoticeHours;
+    const fee = (Number(booking.totalPrice) || 0) * (policy.shortNoticeFeePercent / 100);
     const msg = shortNotice
-      ? 'This booking is within 24 hours. A short-notice cancellation fee may apply. Are you sure?'
-      : 'Are you sure you want to cancel this booking?';
+      ? `${policy.cancellationMessage}\n\nFee for this booking: ${money(fee)}. Do you agree and want to cancel?`
+      : 'Are you sure you want to cancel this booking? There is no fee because it is more than ' +
+        `${policy.shortNoticeHours} hours away.`;
 
-    Alert.alert('Cancel Booking', msg, [
-      { text: 'Keep Booking', style: 'cancel' },
+    Alert.alert(shortNotice ? 'Short-notice cancellation' : 'Cancel booking', msg, [
+      { text: 'Keep booking', style: 'cancel' },
       {
-        text: 'Cancel Booking',
+        text: shortNotice ? 'I agree, cancel' : 'Cancel booking',
         style: 'destructive',
         onPress: async () => {
           setCancelling(true);
           try {
             await bookingsApi.cancel(booking.id, shortNotice);
-            setBooking((prev) => prev ? { ...prev, status: 'Cancelled' } : prev);
+            setBooking((prev) =>
+              prev
+                ? { ...prev, status: 'Cancelled', ...(shortNotice ? { shortNoticeCancelFeeConsentedAt: new Date().toISOString() } : {}) }
+                : prev
+            );
             Alert.alert('Cancelled', 'Your booking has been cancelled.');
           } catch (err) {
             Alert.alert('Error', err instanceof Error ? err.message : 'Could not cancel booking.');
@@ -199,7 +252,7 @@ export default function BookingDetailScreen() {
         <View style={styles.loader}>
           <Ionicons name="alert-circle-outline" size={48} color={COLORS.textTertiary} />
           <Text style={styles.errorText}>Booking not found</Text>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
+          <TouchableOpacity onPress={() => goBack(router)} style={styles.backLink}>
             <Text style={styles.backLinkText}>Go back</Text>
           </TouchableOpacity>
         </View>
@@ -208,11 +261,13 @@ export default function BookingDetailScreen() {
   }
 
   const sc = getStatusColor(booking.status);
+  const isStaffRole = user?.role === 'staff';
   const canCancel = booking.status === 'Pending' || booking.status === 'Confirmed';
   const canReschedule = canCancel && hoursUntil(booking.date, booking.time) >= RESCHEDULE_NOTICE_HOURS;
   const canRate = booking.status === 'Completed' && !booking.rating;
-  const canChat = booking.status !== 'Cancelled' && !booking.chatClosedByAdmin;
-  const isStaff = user?.role === 'staff';
+  const hasCleaner = !!booking.assignedStaffId || !!booking.assignedStaffIds?.length;
+  const canChat = booking.status !== 'Cancelled' && !booking.chatClosedByAdmin && (isStaffRole || hasCleaner);
+  const isStaff = isStaffRole;
 
   const enRouteAt = tracking?.enRouteAt ?? booking.enRouteAt ?? null;
   const cleanerLoc = tracking?.cleanerLocation ?? null;
@@ -222,15 +277,37 @@ export default function BookingDetailScreen() {
   const seenAgo = minutesAgo(cleanerLoc?.at);
   const arrived = kmAway != null && kmAway < 0.2;
 
+  const ymd = String(booking.date).slice(0, 10);
+  const longDate = (() => {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return y && m && d ? new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : ymd;
+  })();
+  const hours = Number(booking.propertyDetails?.duration) || null;
+  const step = journeyStep(booking, enRouteAt, arrived);
+  const cancelled = booking.status === 'Cancelled';
+  const addressText = [booking.address?.line1, booking.address?.city, booking.address?.postcode].filter(Boolean).join(', ');
+  const property = booking.propertyDetails
+    ? [
+        booking.propertyDetails.bedrooms != null ? `${booking.propertyDetails.bedrooms} bed` : null,
+        booking.propertyDetails.bathrooms != null ? `${booking.propertyDetails.bathrooms} bath` : null,
+        booking.propertyDetails.propertyType || null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
-        <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        <View style={{ width: 36 }} />
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={styles.headerTitle}>Booking</Text>
+          <Text style={styles.headerRef}>{booking.bookingId || `#${booking.id}`}</Text>
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -238,17 +315,50 @@ export default function BookingDetailScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Status banner */}
-        <View style={[styles.statusBanner, { backgroundColor: sc.bg }]}>
-          <Text style={[styles.statusText, { color: sc.text }]}>{booking.status}</Text>
-          <Text style={styles.bookingRef}>{booking.bookingId || `#${booking.id}`}</Text>
+        {/* Summary */}
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <StatusBadge status={booking.status} />
+            <Text style={styles.heroPrice}>{money(booking.totalPrice)}</Text>
+          </View>
+          <Text style={[styles.heroService, cancelled && styles.heroServiceCancelled]}>{serviceLabel(booking.serviceType)}</Text>
+          <Text style={styles.heroWhen}>
+            {friendlyDay(ymd)} at {booking.time || '--:--'}
+          </Text>
+          <Text style={styles.heroSub}>
+            {longDate}
+            {hours ? ` · ${hours} hour${hours === 1 ? '' : 's'}` : ''}
+            {booking.frequency && booking.frequency !== 'One-time' ? ` · ${booking.frequency}` : ''}
+          </Text>
+
+          {cancelled ? (
+            <View style={styles.cancelNote}>
+              <Ionicons name="close-circle" size={18} color={COLORS.error} />
+              <Text style={styles.cancelNoteText}>This booking was cancelled.</Text>
+            </View>
+          ) : (
+            <View style={styles.journey}>
+              {JOURNEY.map((label, i) => {
+                const done = i < step || (i === step && step === JOURNEY.length - 1);
+                const active = i === step && !done;
+                return (
+                  <View key={label} style={styles.journeyStep}>
+                    <View style={[styles.journeyBar, (done || active) && styles.journeyBarOn, active && styles.journeyBarActive]} />
+                    <Text style={[styles.journeyLabel, active && styles.journeyLabelActive, done && styles.journeyLabelDone]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Live tracking (client, day of the job) */}
         {trackLive && (
           <View style={[styles.card, styles.liveCard]}>
             <View style={styles.cardIconRow}>
-              <Ionicons name="navigate" size={18} color={enRouteAt ? COLORS.status.inProgress : COLORS.primary} />
+              <View style={[styles.liveDot, enRouteAt ? styles.liveDotOn : null]} />
               <Text style={styles.cardLabel}>Live status</Text>
             </View>
             {enRouteAt ? (
@@ -274,7 +384,7 @@ export default function BookingDetailScreen() {
             ) : (
               <>
                 <Text style={styles.cardValue}>Scheduled for {booking.time} today</Text>
-                <Text style={styles.cardValueSub}>We will notify you as soon as your cleaner sets off.</Text>
+                <Text style={styles.cardValueSub}>We will let you know as soon as your cleaner sets off.</Text>
               </>
             )}
           </View>
@@ -295,132 +405,59 @@ export default function BookingDetailScreen() {
           </View>
         )}
 
-        {/* Service & date */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Service</Text>
-          <Text style={styles.cardValue}>{booking.serviceType}</Text>
-
-          <View style={styles.cardDivider} />
-
-          <View style={styles.cardRow}>
-            <View style={styles.cardCol}>
-              <Text style={styles.cardLabel}>Date</Text>
-              <Text style={styles.cardValue}>
-                {new Date(booking.date).toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric' })}
-              </Text>
-            </View>
-            <View style={styles.cardCol}>
-              <Text style={styles.cardLabel}>Time</Text>
-              <Text style={styles.cardValue}>{booking.time}</Text>
-            </View>
-          </View>
-
-          {booking.frequency && booking.frequency !== 'One-time' && (
-            <>
-              <View style={styles.cardDivider} />
-              <Text style={styles.cardLabel}>Frequency</Text>
-              <Text style={styles.cardValue}>{booking.frequency}</Text>
-            </>
-          )}
+        {/* Details */}
+        <View style={styles.detailsCard}>
+          <DetailRow
+            icon="location-outline"
+            label="Address"
+            value={addressText || 'Not provided'}
+            action={
+              addressText
+                ? { label: 'Map', onPress: () => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText)}`) }
+                : undefined
+            }
+          />
+          {property ? <DetailRow icon="home-outline" label="Property" value={property} /> : null}
+          {booking.extras && booking.extras.length > 0 ? (
+            <DetailRow
+              icon="add-circle-outline"
+              label="Extras"
+              value={booking.extras
+                .map((ex) => `${ex.quantity > 1 ? `${ex.quantity} x ` : ''}${extraNames[ex.id] || 'Extra service'}`)
+                .join('\n')}
+            />
+          ) : null}
+          {booking.instructions ? <DetailRow icon="document-text-outline" label="Your notes for the cleaner" value={booking.instructions} /> : null}
+          {isStaff ? (
+            <DetailRow
+              icon="person-outline"
+              label="Client"
+              value={[booking.contact?.name, booking.contact?.phone].filter(Boolean).join(' · ') || 'Not provided'}
+              action={booking.contact?.phone ? { label: 'Call', onPress: () => Linking.openURL(`tel:${booking.contact!.phone}`) } : undefined}
+            />
+          ) : null}
         </View>
 
-        {/* Address */}
-        <View style={styles.card}>
-          <View style={styles.cardIconRow}>
-            <Ionicons name="location-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.cardLabel}>Address</Text>
-          </View>
-          <Text style={styles.cardValue}>
-            {booking.address?.line1}
-            {booking.address?.city ? `, ${booking.address.city}` : ''}
-          </Text>
-          <Text style={styles.cardValueSub}>{booking.address?.postcode}</Text>
-        </View>
+        {!isStaff ? (
+          <>
+            <AssignedCleaners booking={booking} />
+            <BookingPayments booking={booking} onChange={setBooking} />
+          </>
+        ) : null}
 
-        {/* Contact */}
-        <View style={styles.card}>
-          <View style={styles.cardIconRow}>
-            <Ionicons name="person-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.cardLabel}>Contact</Text>
-          </View>
-          <Text style={styles.cardValue}>{booking.contact?.name}</Text>
-          <Text style={styles.cardValueSub}>{booking.contact?.email}</Text>
-          {booking.contact?.phone && (
-            <TouchableOpacity onPress={() => Linking.openURL(`tel:${booking.contact!.phone}`)}>
-              <Text style={[styles.cardValueSub, { color: COLORS.primary }]}>{booking.contact.phone}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Property details */}
-        {booking.propertyDetails && (
-          <View style={styles.card}>
-            <View style={styles.cardIconRow}>
-              <Ionicons name="home-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.cardLabel}>Property</Text>
-            </View>
-            <View style={styles.propGrid}>
-              {booking.propertyDetails.bedrooms != null && (
-                <View style={styles.propItem}>
-                  <Text style={styles.propNum}>{booking.propertyDetails.bedrooms}</Text>
-                  <Text style={styles.propLabel}>Bed</Text>
-                </View>
-              )}
-              {booking.propertyDetails.bathrooms != null && (
-                <View style={styles.propItem}>
-                  <Text style={styles.propNum}>{booking.propertyDetails.bathrooms}</Text>
-                  <Text style={styles.propLabel}>Bath</Text>
-                </View>
-              )}
-              {booking.propertyDetails.duration != null && (
-                <View style={styles.propItem}>
-                  <Text style={styles.propNum}>{booking.propertyDetails.duration}</Text>
-                  <Text style={styles.propLabel}>Hours</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Extras */}
-        {booking.extras && booking.extras.length > 0 && (
-          <View style={styles.card}>
-            <View style={styles.cardIconRow}>
-              <Ionicons name="add-circle-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.cardLabel}>Extras</Text>
-            </View>
-            {booking.extras.map((ex, i) => (
-              <Text key={i} style={styles.cardValue}>
-                {ex.quantity > 1 ? `${ex.quantity}x ` : ''}Extra #{ex.id}
-              </Text>
-            ))}
-          </View>
-        )}
-
-        {/* Instructions */}
-        {booking.instructions && (
-          <View style={styles.card}>
-            <View style={styles.cardIconRow}>
-              <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.cardLabel}>Instructions</Text>
-            </View>
-            <Text style={styles.cardValueSub}>{booking.instructions}</Text>
-          </View>
-        )}
-
-        {/* Price */}
-        <View style={styles.priceCard}>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Total</Text>
-            <Text style={styles.priceValue}>{'£'}{Number(booking.totalPrice).toFixed(2)}</Text>
-          </View>
-          {booking.discountCode && (
+        {/* Price breakdown (only when a discount needs explaining; the total is in the summary) */}
+        {booking.discountCode ? (
+          <View style={styles.priceCard}>
             <View style={styles.priceRow}>
               <Text style={styles.priceSub}>Discount ({booking.discountCode})</Text>
-              <Text style={styles.priceSub}>-{'£'}{Number(booking.discountAmount || 0).toFixed(2)}</Text>
+              <Text style={styles.priceSub}>-{money(booking.discountAmount)}</Text>
             </View>
-          )}
-        </View>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>You pay</Text>
+              <Text style={styles.priceValue}>{money(booking.totalPrice)}</Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* Rating display */}
         {booking.rating != null && (
@@ -490,10 +527,13 @@ export default function BookingDetailScreen() {
             >
               <Ionicons name="chatbubble-outline" size={18} color={COLORS.white} />
               <Text style={styles.actionBtnTextWhite}>
-                {isStaff ? 'Chat with Client' : 'Chat with Cleaner'}
+                {isStaff ? 'Message client' : 'Message your cleaner'}
               </Text>
             </TouchableOpacity>
           )}
+          {canChat && hoursUntil(booking.date, booking.time) > 1 / 6 ? (
+            <Text style={styles.rescheduleHint}>Chat opens 10 minutes before the start time.</Text>
+          ) : null}
 
           {isStaff && (booking.status === 'Pending' || booking.status === 'Confirmed' || booking.status === 'In Progress') && !booking.workCompletion && (
             <TouchableOpacity
@@ -754,6 +794,62 @@ const pickerStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  headerRef: { fontSize: 12, color: COLORS.textTertiary, marginTop: 1, letterSpacing: 0.3 },
+  hero: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border + '80',
+    marginBottom: SPACING.md,
+    shadowColor: '#0c1f33',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heroPrice: { fontSize: 20, fontWeight: '800', color: COLORS.text },
+  heroService: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginTop: SPACING.md, letterSpacing: -0.3 },
+  heroServiceCancelled: { textDecorationLine: 'line-through', color: COLORS.textSecondary },
+  heroWhen: { fontSize: 17, fontWeight: '700', color: COLORS.primary, marginTop: 4 },
+  heroSub: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
+  journey: { flexDirection: 'row', gap: 4, marginTop: SPACING.lg },
+  journeyStep: { flex: 1 },
+  journeyBar: { height: 6, borderRadius: 3, backgroundColor: COLORS.borderLight },
+  journeyBarOn: { backgroundColor: COLORS.secondary },
+  journeyBarActive: { backgroundColor: COLORS.primary },
+  journeyLabel: { fontSize: 10.5, fontWeight: '500', color: COLORS.textTertiary, marginTop: 6 },
+  journeyLabelActive: { color: COLORS.primary, fontWeight: '700' },
+  journeyLabelDone: { color: COLORS.secondary, fontWeight: '600' },
+  cancelNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginTop: SPACING.base,
+    backgroundColor: COLORS.errorLight,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+  },
+  cancelNoteText: { fontSize: 14, fontWeight: '600', color: COLORS.error },
+  liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.textTertiary },
+  liveDotOn: { backgroundColor: COLORS.secondary },
+  detailsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border + '80',
+    paddingHorizontal: SPACING.base,
+    marginBottom: SPACING.md,
+  },
+  detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  detailIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: COLORS.primary + '12', alignItems: 'center', justifyContent: 'center' },
+  detailLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textTertiary },
+  detailValue: { fontSize: 15, color: COLORS.text, marginTop: 2, lineHeight: 21 },
+  detailAction: { alignSelf: 'center', backgroundColor: COLORS.primary + '12', paddingHorizontal: 12, paddingVertical: 7, borderRadius: RADIUS.full },
+  detailActionText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+
   safe: { flex: 1, backgroundColor: COLORS.background },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background, gap: SPACING.sm },
   errorText: { fontSize: 16, color: COLORS.textSecondary },
@@ -766,10 +862,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
   },
-  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.borderLight, justifyContent: 'center', alignItems: 'center' },
   headerLogo: { width: 120, height: 40 },
 
-  scroll: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },
+  scroll: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.xxxl },
 
   statusBanner: {
     flexDirection: 'row',

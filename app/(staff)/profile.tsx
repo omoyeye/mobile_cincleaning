@@ -88,7 +88,7 @@ export default function StaffProfileScreen() {
               Alert.alert('Account Deletion Requested', 'Your data will be erased within 30 days per UK GDPR. You will receive confirmation by email.');
               await logout();
             } catch {
-              Alert.alert('Error', 'Please email info@cleanitneatly.com to request account deletion.');
+              Alert.alert('Error', 'Please email support@cleanitneatly.com to request account deletion.');
             }
           },
         },
@@ -110,7 +110,7 @@ export default function StaffProfileScreen() {
               await authApi.requestDataExport(user.id);
               Alert.alert('Request Submitted', 'You will receive your data export via email within 30 days.');
             } catch {
-              Alert.alert('Error', 'Please email info@cleanitneatly.com to make a Subject Access Request.');
+              Alert.alert('Error', 'Please email support@cleanitneatly.com to make a Subject Access Request.');
             }
           },
         },
@@ -132,6 +132,7 @@ export default function StaffProfileScreen() {
       items: [
         { icon: 'person-outline', label: 'Personal Details', sub: user?.email, onPress: () => router.push('/edit-profile') },
         { icon: 'card-outline', label: 'Bank Details', sub: staff?.bankName || 'Not set', onPress: () => router.push('/bank-details') },
+        { icon: 'trending-up-outline', label: 'My Performance', sub: 'Ratings, punctuality and earnings', onPress: () => router.push('/performance') },
         { icon: 'star-outline', label: 'My Reviews', onPress: () => router.push('/my-reviews') },
       ],
     },
@@ -140,7 +141,7 @@ export default function StaffProfileScreen() {
       items: [
         { icon: 'alarm-outline', label: 'Running Late', sub: 'Notify client & office of a delay', onPress: () => router.push('/running-late') },
         { icon: 'people-outline', label: 'Referrals', sub: `${referrals.length} referral${referrals.length !== 1 ? 's' : ''}`, onPress: () => router.push('/referrals') },
-        { icon: 'document-text-outline', label: 'Contracts & Documents', onPress: () => Alert.alert('Contracts & Documents', 'Your employment contract and related documents are managed by CiN Cleaning. Contact your manager or email info@cleanitneatly.com for copies.') },
+        { icon: 'document-text-outline', label: 'Contracts & Documents', onPress: () => Alert.alert('Contracts & Documents', 'Your employment contract and related documents are managed by CiN Cleaning. Contact your manager or email support@cleanitneatly.com for copies.') },
       ],
     },
     {

@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '../../utils/navigation';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
@@ -24,10 +25,24 @@ import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { StatusBadge, StepTracker } from '../../components/staff/StaffKit';
 import type { Booking } from '../../types';
 import { formatClock, isTodayYmd } from '../../utils/tracking';
-
-const LOCATION_PUSH_INTERVAL_MS = 30000;
+import { photoToDataUrl } from '../../utils/photos';
+import { startLiveTracking, stopLiveTracking, isTrackingJob } from '../../services/liveTracking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Phase = 'pre' | 'clocked_in' | 'completing' | 'done';
+type JobPhoto = { uri: string; width?: number; height?: number };
+
+/** Work in progress is saved on the phone so leaving the screen or the app closing loses nothing. */
+type SavedProgress = {
+  clockInAt: string;
+  checklistDone: string[];
+  notes: string;
+  issues: string;
+  location: { lat: number; lng: number } | null;
+  beforePhotos: JobPhoto[];
+  afterPhotos: JobPhoto[];
+};
+const progressKey = (bookingId: number) => `cin_job_progress_${bookingId}`;
 
 function pad(n: number) {
   return n.toString().padStart(2, '0');
@@ -99,8 +114,9 @@ export default function JobScreen() {
   const [earlyReason, setEarlyReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [signature, setSignature] = useState('');
-  const [beforePhotos, setBeforePhotos] = useState<{ uri: string; base64: string }[]>([]);
-  const [afterPhotos, setAfterPhotos] = useState<{ uri: string; base64: string }[]>([]);
+  const [beforePhotos, setBeforePhotos] = useState<JobPhoto[]>([]);
+  const [afterPhotos, setAfterPhotos] = useState<JobPhoto[]>([]);
+  const [restored, setRestored] = useState(false);
   const [checklist, setChecklist] = useState<{ task: string; done: boolean }[]>([]);
   const sigWebViewRef = useRef<WebView>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -113,10 +129,31 @@ export default function JobScreen() {
       const data = await bookingsApi.getOne(bookingId);
       setBooking(data);
       setEnRouteAt(data.enRouteAt ?? null);
-      if (data.workCompletion) setPhase('done');
       const serviceKey = data.serviceType?.replace(/ /g, '_').toLowerCase() || 'standard';
       const tasks = SERVICE_CHECKLISTS[serviceKey] || SERVICE_CHECKLISTS.standard;
-      setChecklist(tasks.map((task) => ({ task, done: false })));
+      if (data.workCompletion) {
+        setPhase('done');
+        setChecklist(tasks.map((task) => ({ task, done: false })));
+        AsyncStorage.removeItem(progressKey(bookingId)).catch(() => {});
+      } else {
+        const saved = await AsyncStorage.getItem(progressKey(bookingId)).catch(() => null);
+        const progress: SavedProgress | null = saved ? JSON.parse(saved) : null;
+        const done = new Set(progress?.checklistDone ?? []);
+        setChecklist(tasks.map((task) => ({ task, done: done.has(task) })));
+        if (progress?.clockInAt && !restored) {
+          const from = new Date(progress.clockInAt);
+          setClockInTime(from);
+          setNotes(progress.notes || '');
+          setIssues(progress.issues || '');
+          setLocation(progress.location);
+          setBeforePhotos(progress.beforePhotos || []);
+          setAfterPhotos(progress.afterPhotos || []);
+          setPhase('clocked_in');
+          setElapsed(Math.floor((Date.now() - from.getTime()) / 1000));
+          if (!timerRef.current) startTimer(from);
+        }
+        setRestored(true);
+      }
     } catch {
       showToast('Could not load job details', 'error');
     }
@@ -125,6 +162,21 @@ export default function JobScreen() {
 
   useEffect(() => { fetchBooking(); }, [fetchBooking]);
 
+  // Keep the job's progress on the phone while the cleaner is working.
+  useEffect(() => {
+    if (!clockInTime || phase === 'done') return;
+    const progress: SavedProgress = {
+      clockInAt: clockInTime.toISOString(),
+      checklistDone: checklist.filter((c) => c.done).map((c) => c.task),
+      notes,
+      issues,
+      location,
+      beforePhotos,
+      afterPhotos,
+    };
+    AsyncStorage.setItem(progressKey(bookingId), JSON.stringify(progress)).catch(() => {});
+  }, [clockInTime, phase, checklist, notes, issues, location, beforePhotos, afterPhotos, bookingId]);
+
   const takePhoto = async (type: 'before' | 'after') => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
@@ -132,13 +184,12 @@ export default function JobScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
-      quality: 0.5,
-      base64: true,
+      quality: 0.8,
       allowsEditing: false,
     });
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
-      const photo = { uri: asset.uri, base64: asset.base64 || '' };
+      const photo: JobPhoto = { uri: asset.uri, width: asset.width, height: asset.height };
       if (type === 'before') setBeforePhotos((prev) => [...prev, photo]);
       else setAfterPhotos((prev) => [...prev, photo]);
       showToast(`${type === 'before' ? 'Before' : 'After'} photo added`, 'success');
@@ -158,35 +209,25 @@ export default function JobScreen() {
   const isJobToday = !!booking && isTodayYmd(booking.date);
   const jobOpen = !!booking && (booking.status === 'Pending' || booking.status === 'Confirmed');
 
-  // Share GPS with the office and client while travelling (foreground only).
+  // Share GPS with the office and client while travelling. Keeps going in Google Maps or with the
+  // phone locked, and stops when the cleaner arrives or the job is no longer open today.
   useEffect(() => {
-    if (!enRouteAt || phase !== 'pre' || !isJobToday || !jobOpen) return;
-    let sub: Location.LocationSubscription | null = null;
+    if (!booking) return;
+    const shouldShare = !!enRouteAt && phase === 'pre' && isJobToday && jobOpen;
     let cancelled = false;
-    let lastSent = 0;
     (async () => {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted' || cancelled) return;
-      sub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, timeInterval: LOCATION_PUSH_INTERVAL_MS, distanceInterval: 50 },
-        (pos) => {
-          const now = Date.now();
-          if (now - lastSent < LOCATION_PUSH_INTERVAL_MS) return;
-          lastSent = now;
-          staffApi
-            .updateLocation(bookingId, { lat: pos.coords.latitude, lng: pos.coords.longitude })
-            .catch(() => {});
-        },
-      );
-      if (cancelled) sub.remove();
-      else setSharingLocation(true);
+      if (shouldShare) {
+        const ok = await startLiveTracking(bookingId);
+        if (!cancelled) setSharingLocation(ok);
+      } else {
+        if (await isTrackingJob(bookingId)) await stopLiveTracking();
+        if (!cancelled) setSharingLocation(false);
+      }
     })();
     return () => {
       cancelled = true;
-      sub?.remove();
-      setSharingLocation(false);
     };
-  }, [enRouteAt, phase, isJobToday, jobOpen, bookingId]);
+  }, [booking, enRouteAt, phase, isJobToday, jobOpen, bookingId]);
 
   const handleStartTravel = async () => {
     if (!isJobToday) {
@@ -229,6 +270,11 @@ export default function JobScreen() {
   };
 
   const handleClockIn = async () => {
+    // Clocking in on the wrong day records the wrong hours on the invoice.
+    if (!isJobToday) {
+      Alert.alert('Not today', 'You can clock in on the day of this job.');
+      return;
+    }
     let arrivedAt: { lat: number; lng: number } | undefined;
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -274,10 +320,15 @@ export default function JobScreen() {
 
     const clockOutTime = new Date();
     try {
-      const allPhotos = [
-        ...beforePhotos.map((p) => `data:image/jpeg;base64,${p.base64}`),
-        ...afterPhotos.map((p) => `data:image/jpeg;base64,${p.base64}`),
-      ].filter((p) => p.length > 30);
+      const allPhotos: string[] = [];
+      for (const p of [...beforePhotos, ...afterPhotos]) {
+        try {
+          const url = await photoToDataUrl(p.uri, p.width, p.height);
+          if (url.length > 30) allPhotos.push(url);
+        } catch {
+          /* photo file no longer on the phone; submit the rest */
+        }
+      }
 
       await staffApi.completeJob(bookingId, {
         clockInTime: clockInTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -292,6 +343,7 @@ export default function JobScreen() {
         photos: allPhotos.length > 0 ? allPhotos : undefined,
       });
       setPhase('done');
+      AsyncStorage.removeItem(progressKey(bookingId)).catch(() => {});
       Alert.alert('Job Complete', 'Your work has been submitted successfully.');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not submit completion.');
@@ -313,7 +365,7 @@ export default function JobScreen() {
         <View style={styles.loader}>
           <Ionicons name="alert-circle-outline" size={48} color={COLORS.textTertiary} />
           <Text style={styles.errorText}>Job not found</Text>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
+          <TouchableOpacity onPress={() => goBack(router)} style={styles.backLink}>
             <Text style={styles.backLinkText}>Go back</Text>
           </TouchableOpacity>
         </View>
@@ -325,7 +377,7 @@ export default function JobScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
         <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
@@ -376,6 +428,27 @@ export default function JobScreen() {
               {booking.address?.line1}, {booking.address?.postcode}
             </Text>
           </View>
+          {/* Contact the client (website: job chat) */}
+          <View style={styles.contactRow}>
+            <TouchableOpacity style={styles.contactBtn} onPress={() => router.push(`/chat/${bookingId}`)} accessibilityLabel="Message client">
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.contactBtnText}>Message</Text>
+            </TouchableOpacity>
+            {booking.contact?.phone ? (
+              <TouchableOpacity
+                style={styles.contactBtn}
+                onPress={() => Linking.openURL(`tel:${String(booking.contact!.phone).replace(/\s/g, '')}`)}
+                accessibilityLabel="Call client"
+              >
+                <Ionicons name="call-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.contactBtnText}>Call</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity style={styles.contactBtn} onPress={openDirections} accessibilityLabel="Directions">
+              <Ionicons name="map-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.contactBtnText}>Map</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Travel / running late */}
@@ -390,7 +463,7 @@ export default function JobScreen() {
                   <Text style={styles.enRouteTitle}>On the way since {formatClock(enRouteAt)}</Text>
                   <Text style={styles.travelHint}>
                     {sharingLocation
-                      ? 'Sharing your live location with the office and client. Keep this screen open while you travel.'
+                      ? 'Sharing your live location with the office and client. You can switch to Google Maps; sharing stops when you arrive.'
                       : 'Turn on location to share your live position.'}
                   </Text>
                 </View>
@@ -440,8 +513,10 @@ export default function JobScreen() {
             <View style={styles.timerCircle}>
               <Ionicons name="play" size={48} color={COLORS.primary} />
             </View>
-            <Text style={styles.timerLabel}>Ready to start?</Text>
-            <Text style={styles.timerSub}>Take before photos, then clock in</Text>
+            <Text style={styles.timerLabel}>{isJobToday ? 'Ready to start?' : 'Not started yet'}</Text>
+            <Text style={styles.timerSub}>
+              {isJobToday ? 'Take before photos, then clock in' : 'Clock in opens on the day of the job'}
+            </Text>
 
             {/* Before photos */}
             <View style={styles.photoSection}>
@@ -678,7 +753,7 @@ export default function JobScreen() {
                 )}
               </View>
             )}
-            <TouchableOpacity style={styles.backToSchedule} onPress={() => router.back()}>
+            <TouchableOpacity style={styles.backToSchedule} onPress={() => goBack(router)}>
               <Text style={styles.backToScheduleText}>Back to Schedule</Text>
             </TouchableOpacity>
           </View>
@@ -691,6 +766,12 @@ export default function JobScreen() {
 }
 
 const styles = StyleSheet.create({
+  contactRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md },
+  contactBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 42,
+    borderRadius: RADIUS.md, backgroundColor: COLORS.primary + '10', borderWidth: 1, borderColor: COLORS.primary + '25',
+  },
+  contactBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
   safe: { flex: 1, backgroundColor: COLORS.background },
   jobHead: { marginBottom: SPACING.base },
   jobHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm },

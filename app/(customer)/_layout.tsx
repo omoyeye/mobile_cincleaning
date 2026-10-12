@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/config';
 import { Platform } from 'react-native';
@@ -7,7 +7,7 @@ import { customerApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function CustomerLayout() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [unread, setUnread] = useState(0);
 
   const fetchUnread = useCallback(async () => {
@@ -23,6 +23,9 @@ export default function CustomerLayout() {
     const interval = setInterval(fetchUnread, 30000);
     return () => clearInterval(interval);
   }, [fetchUnread]);
+  // Signed out (or the session expired): back to the login screen.
+  if (!loading && !user) return <Redirect href="/login" />;
+
   return (
     <Tabs
       screenOptions={{
@@ -61,12 +64,6 @@ export default function CustomerLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" size={size} color={color} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="book"
-        options={{
-          href: null,
         }}
       />
       <Tabs.Screen

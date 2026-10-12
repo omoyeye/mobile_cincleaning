@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '../utils/navigation';
 import { staffApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
@@ -116,7 +117,7 @@ export default function RunningLateScreen() {
       showToast(`Update sent to the ${who}`, 'success');
       setNote('');
       await load();
-      if (bookingId) router.back();
+      if (bookingId) goBack(router);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not send update', 'error');
     }
@@ -132,7 +133,7 @@ export default function RunningLateScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Running Late</Text>

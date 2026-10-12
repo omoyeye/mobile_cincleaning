@@ -17,7 +17,9 @@ import { useToast } from '../../components/Toast';
 import { ListSkeleton } from '../../components/SkeletonLoader';
 import { useHaptic } from '../../hooks/useHaptic';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
-import type { Notification } from '../../types';
+import type { Booking, Notification } from '../../types';
+import { ScreenHeader } from '../../components/ClientKit';
+import { alertTarget } from '../../utils/alerts';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -57,23 +59,9 @@ function getAlertColor(type: string) {
   }
 }
 
-function getNavigationTarget(notification: Notification): { route: string; params?: object } | null {
-  const msg = notification.message || '';
-  const bookingIdMatch = msg.match(/booking\s*#?(\d+)/i) || msg.match(/#(\d+)/);
-
-  switch (notification.type) {
-    case 'booking_update':
-    case 'booking_cancelled':
-    case 'invoice':
-    case 'payment':
-      if (bookingIdMatch) return { route: `/booking/${bookingIdMatch[1]}` };
-      return null;
-    case 'chat_message':
-      if (bookingIdMatch) return { route: `/chat/${bookingIdMatch[1]}` };
-      return null;
-    default:
-      return null;
-  }
+function getNavigationTarget(notification: Notification, bookings: Booking[]): { route: string } | null {
+  const route = alertTarget(notification, bookings, 'customer');
+  return route ? { route } : null;
 }
 
 export default function NotificationsScreen() {
@@ -81,6 +69,11 @@ export default function NotificationsScreen() {
   const { showToast } = useToast();
   const haptic = useHaptic();
   const [alerts, setAlerts] = useState<Notification[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+
+  useEffect(() => {
+    customerApi.getBookings().then(setBookings).catch(() => {});
+  }, []);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -131,7 +124,7 @@ export default function NotificationsScreen() {
 
   const handlePress = (item: Notification) => {
     if (!item.isRead) markRead(item.id);
-    const target = getNavigationTarget(item);
+    const target = getNavigationTarget(item, bookings);
     if (target) {
       router.push(target.route as any);
     }
@@ -140,8 +133,8 @@ export default function NotificationsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.header}>
-          <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
+        <View style={styles.headerWrap}>
+          <ScreenHeader title="Alerts" subtitle="Updates about your bookings" />
         </View>
         <ListSkeleton count={5} type="notification" />
       </SafeAreaView>
@@ -152,21 +145,20 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
-        <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        {unreadCount > 0 && (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>{unreadCount}</Text>
-          </View>
-        )}
+      <View style={styles.headerWrap}>
+        <ScreenHeader
+          title="Alerts"
+          subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'You are all caught up'}
+          right={
+            unreadCount > 0 ? (
+              <TouchableOpacity style={styles.markAllBtn} onPress={markAllRead} activeOpacity={0.7} accessibilityLabel="Mark all as read">
+                <Ionicons name="checkmark-done-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.markAllText}>Mark all read</Text>
+              </TouchableOpacity>
+            ) : undefined
+          }
+        />
       </View>
-
-      {unreadCount > 0 && (
-        <TouchableOpacity style={styles.markAllBtn} onPress={markAllRead} activeOpacity={0.7}>
-          <Ionicons name="checkmark-done-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.markAllText}>Mark all as read</Text>
-        </TouchableOpacity>
-      )}
 
       <FlatList
         data={alerts}
@@ -182,7 +174,7 @@ export default function NotificationsScreen() {
         }
         renderItem={({ item }) => {
           const iconColor = getAlertColor(item.type);
-          const target = getNavigationTarget(item);
+          const target = getNavigationTarget(item, bookings);
           return (
             <TouchableOpacity
               style={[styles.card, !item.isRead && styles.cardUnread]}
@@ -235,6 +227,7 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   headerLogo: { width: 140, height: 45 },
+  headerWrap: { paddingHorizontal: SPACING.lg },
   unreadBadge: {
     backgroundColor: COLORS.primary,
     minWidth: 22,
@@ -248,16 +241,14 @@ const styles = StyleSheet.create({
   markAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-end',
     gap: 4,
-    marginRight: SPACING.lg,
-    marginBottom: SPACING.sm,
+    marginBottom: 4,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: RADIUS.full,
     backgroundColor: COLORS.primary + '10',
   },
-  markAllText: { fontSize: 12, fontWeight: '600', color: COLORS.primary },
+  markAllText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
   list: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl, paddingTop: SPACING.sm },
   card: {
     flexDirection: 'row',

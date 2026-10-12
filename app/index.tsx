@@ -31,6 +31,8 @@ export default function HomePage() {
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
   useEffect(() => {
+    // Wait until the saved sign-in has loaded, or signed-in people get sent to onboarding and login.
+    if (loading) return;
     (async () => {
       try {
         const done = await AsyncStorage.getItem('onboarding_complete');
@@ -41,7 +43,7 @@ export default function HomePage() {
       } catch {}
       setCheckingOnboarding(false);
     })();
-  }, [user]);
+  }, [user, loading]);
 
   if (loading || checkingOnboarding) {
     return (

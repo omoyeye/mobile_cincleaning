@@ -11,11 +11,13 @@ import {
   Platform,
   Animated,
   KeyboardAvoidingView,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBack } from '../utils/navigation';
+import { useBusinessContact } from '../hooks/useBusinessContact';
+import { useToast } from '../components/Toast';
 import { useAuth } from '../contexts/AuthContext';
 import { publicApi, bookingsApi } from '../services/api';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
@@ -28,6 +30,14 @@ const FULL_UK_POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 
 type Step = 'service' | 'details' | 'extras' | 'datetime' | 'address' | 'summary';
 const ALL_STEPS: Step[] = ['service', 'details', 'extras', 'datetime', 'address', 'summary'];
+const STEP_NAMES: Record<Step, string> = {
+  service: 'Service',
+  details: 'Your property',
+  extras: 'Extras',
+  datetime: 'Date and time',
+  address: 'Address',
+  summary: 'Review and book',
+};
 
 const SERVICE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   general: 'sparkles-outline',
@@ -145,6 +155,10 @@ export default function BookScreen() {
   const [customTip, setCustomTip] = useState('');
   const [useCustomTip, setUseCustomTip] = useState(false);
   const [smsOptIn, setSmsOptIn] = useState(false);
+  /** Same agreement the website asks for; the server refuses bookings without it. */
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const policy = useBusinessContact();
+  const { showToast } = useToast();
 
   const trigger = getServiceTrigger(selectedService);
   const isQuoteBased = trigger === 'commercial' || trigger === 'jet_washing';
@@ -192,6 +206,29 @@ export default function BookScreen() {
   }, [selectedService, isQuoteBased, isAirbnb]);
 
   const currentIdx = activeSteps.indexOf(step);
+
+  // Returning clients: fill the street in from their last booking at the same postcode.
+  const prefilledAddress = useRef(false);
+  useEffect(() => {
+    if (step !== 'address' || !user || prefilledAddress.current || address.line1.trim()) return;
+    prefilledAddress.current = true;
+    const norm = (v: string) => v.replace(/\s/g, '').toUpperCase();
+    bookingsApi
+      .getAll()
+      .then((list) => {
+        const wanted = norm(address.postcode);
+        const match = [...list]
+          .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+          .find((b) => b.address?.line1 && (!wanted || norm(b.address.postcode || '') === wanted));
+        if (!match) return;
+        setAddress((a) =>
+          a.line1.trim()
+            ? a
+            : { ...a, line1: match.address.line1, city: a.city || match.address.city || '', postcode: a.postcode || match.address.postcode || '' }
+        );
+      })
+      .catch(() => {});
+  }, [step, user]);
 
   useEffect(() => {
     if (user) {
@@ -426,7 +463,7 @@ export default function BookScreen() {
   const prev = () => {
     const idx = activeSteps.indexOf(step);
     if (idx > 0) setStep(activeSteps[idx - 1]);
-    else router.back();
+    else goBack(router);
   };
 
   const toggleExtra = (id: number) => {
@@ -470,18 +507,22 @@ export default function BookScreen() {
   };
 
   const handleSubmit = async () => {
+    if (!termsAccepted) {
+      Alert.alert('One more step', 'Please tick the payment and deposit agreement before confirming.');
+      return;
+    }
     setSubmitting(true);
     try {
       const totalDuration = durationHours + durationMinutes / 60;
       const discountLine = breakdown.lines.find((l) => l.type === 'discount');
       const discountAmt = discountLine ? Math.abs(discountLine.amount) : 0;
 
-      await bookingsApi.create({
+      const created = await bookingsApi.create({
         serviceType: selectedService?.name || 'General/Standard Cleaning',
         date,
         time,
         totalPrice: breakdown.total,
-        depositTermsAccepted: true,
+        depositTermsAccepted: termsAccepted,
         address: { line1: address.line1, city: address.city, postcode: address.postcode },
         contact: { name: contactName, email: contactEmail, phone: contactPhone },
         propertyDetails: {
@@ -512,11 +553,17 @@ export default function BookScreen() {
         discountAmount: discountAmt > 0 ? discountAmt : undefined,
         tipAmount: Number(breakdown.tipAmount.toFixed(2)),
       });
-      Alert.alert(
-        'Booking Confirmed!',
-        'Your cleaning has been booked. You will receive a confirmation shortly.',
-        [{ text: 'OK', onPress: () => router.replace('/') }],
-      );
+      if (user && created?.id) {
+        // Same as the website: land on the booking with its status and payment details.
+        showToast(isQuoteBased ? 'Quote request sent. We will be in touch shortly.' : 'Booking request sent. We will confirm it shortly.', 'success');
+        router.replace(`/booking/${created.id}`);
+      } else {
+        Alert.alert(
+          isQuoteBased ? 'Quote request sent' : 'Booking request sent',
+          `Thank you. We have emailed your confirmation${created?.bookingId ? ` (ref ${created.bookingId})` : ''} and our team will confirm shortly.`,
+          [{ text: 'OK', onPress: () => router.replace('/') }],
+        );
+      }
     } catch (err) {
       Alert.alert('Booking Failed', err instanceof Error ? err.message : 'Could not create booking.');
     } finally {
@@ -524,14 +571,22 @@ export default function BookScreen() {
     }
   };
 
-  const generateTimeSlots = () => {
-    const slots: string[] = [];
-    for (let h = 7; h <= 19; h++) {
-      slots.push(`${h.toString().padStart(2, '0')}:00`);
-      if (h < 19) slots.push(`${h.toString().padStart(2, '0')}:30`);
-    }
-    return slots;
-  };
+  /** Every half hour, grouped (the website offers bookings 24/7). */
+  const timeSlotGroups = useMemo(() => {
+    const p = (n: number) => String(n).padStart(2, '0');
+    const all: string[] = [];
+    for (let h = 0; h < 24; h++) all.push(`${p(h)}:00`, `${p(h)}:30`);
+    const inRange = (t: string, from: number, to: number) => {
+      const h = Number(t.slice(0, 2));
+      return h >= from && h < to;
+    };
+    return [
+      { label: 'Morning', icon: 'partly-sunny-outline' as const, slots: all.filter((t) => inRange(t, 6, 12)) },
+      { label: 'Afternoon', icon: 'sunny-outline' as const, slots: all.filter((t) => inRange(t, 12, 17)) },
+      { label: 'Evening', icon: 'cloudy-night-outline' as const, slots: all.filter((t) => inRange(t, 17, 22)) },
+      { label: 'Night', icon: 'moon-outline' as const, slots: all.filter((t) => inRange(t, 22, 24) || inRange(t, 0, 6)) },
+    ];
+  }, []);
 
   const generateDates = () => {
     const dates: { value: string; label: string; day: string }[] = [];
@@ -539,7 +594,8 @@ export default function BookScreen() {
       const d = new Date();
       d.setDate(d.getDate() + i);
       dates.push({
-        value: d.toISOString().split('T')[0],
+        // Local date: toISOString() is UTC and gives the previous day just after midnight in summer.
+        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
         label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         day: d.toLocaleDateString(undefined, { weekday: 'short' }),
       });
@@ -566,11 +622,18 @@ export default function BookScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={prev} style={styles.backBtn}>
+        <TouchableOpacity onPress={prev} style={styles.backBtn} accessibilityLabel={currentIdx > 0 ? 'Previous step' : 'Back'}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
-        <Image source={require('../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        <Text style={styles.stepIndicator}>{currentIdx + 1}/{activeSteps.length}</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Book a clean</Text>
+          <Text style={styles.stepIndicator}>
+            Step {currentIdx + 1} of {activeSteps.length} · {STEP_NAMES[step]}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} accessibilityLabel="Close booking">
+          <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {/* Progress bar */}
@@ -1041,17 +1104,26 @@ export default function BookScreen() {
                 ))}
               </ScrollView>
               <Text style={[styles.fieldLabel, { marginTop: SPACING.lg }]}>Time</Text>
-              <View style={styles.timeGrid}>
-                {generateTimeSlots().map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[styles.timeChip, time === t && styles.timeChipActive]}
-                    onPress={() => setTime(t)}
-                  >
-                    <Text style={[styles.timeText, time === t && styles.timeTextActive]}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {timeSlotGroups.map((group) => (
+                <View key={group.label} style={{ marginBottom: SPACING.md }}>
+                  <View style={styles.slotGroupHead}>
+                    <Ionicons name={group.icon} size={15} color={COLORS.textSecondary} />
+                    <Text style={styles.slotGroupLabel}>{group.label}</Text>
+                  </View>
+                  <View style={styles.timeGrid}>
+                    {group.slots.map((t) => (
+                      <TouchableOpacity
+                        key={t}
+                        style={[styles.timeChip, time === t && styles.timeChipActive]}
+                        onPress={() => setTime(t)}
+                        accessibilityState={{ selected: time === t }}
+                      >
+                        <Text style={[styles.timeText, time === t && styles.timeTextActive]}>{t}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ))}
             </View>
           )}
 
@@ -1077,61 +1149,59 @@ export default function BookScreen() {
                 placeholder="Flat, Floor, etc."
                 placeholderTextColor={COLORS.textTertiary}
               />
-              <View style={styles.row}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>City</Text>
+              <View>
+                <Text style={styles.fieldLabel}>Postcode *</Text>
+                <View style={styles.postcodeRow}>
                   <TextInput
-                    style={styles.input}
-                    value={address.city}
-                    onChangeText={(t) => setAddress((a) => ({ ...a, city: t }))}
-                    placeholder="London"
+                    style={[styles.input, { flex: 1 }]}
+                    value={address.postcode}
+                    onChangeText={(t) => {
+                      setAddress((a) => ({ ...a, postcode: t.toUpperCase() }));
+                      setPostcodeResults([]);
+                    }}
+                    placeholder="SW1A 1AA"
                     placeholderTextColor={COLORS.textTertiary}
+                    autoCapitalize="characters"
                   />
+                  <TouchableOpacity
+                    style={styles.lookupBtn}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      const pc = address.postcode.trim().replace(/\s/g, '');
+                      if (pc.length < 5) return;
+                      setLookingUp(true);
+                      try {
+                        const res = await fetch(`https://api.postcodes.io/postcodes/${pc}`);
+                        const json = await res.json();
+                        if (json.status === 200 && json.result) {
+                          const r = json.result;
+                          setAddress((a) => ({
+                            ...a,
+                            city: r.admin_district || r.parish || '',
+                            postcode: r.postcode || a.postcode,
+                          }));
+                        }
+                      } catch {}
+                      setLookingUp(false);
+                    }}
+                  >
+                    {lookingUp ? (
+                      <ActivityIndicator size="small" color={COLORS.white} />
+                    ) : (
+                      <Ionicons name="search" size={16} color={COLORS.white} />
+                    )}
+                  </TouchableOpacity>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Postcode *</Text>
-                  <View style={styles.postcodeRow}>
-                    <TextInput
-                      style={[styles.input, { flex: 1 }]}
-                      value={address.postcode}
-                      onChangeText={(t) => {
-                        setAddress((a) => ({ ...a, postcode: t.toUpperCase() }));
-                        setPostcodeResults([]);
-                      }}
-                      placeholder="SW1A 1AA"
-                      placeholderTextColor={COLORS.textTertiary}
-                      autoCapitalize="characters"
-                    />
-                    <TouchableOpacity
-                      style={styles.lookupBtn}
-                      activeOpacity={0.7}
-                      onPress={async () => {
-                        const pc = address.postcode.trim().replace(/\s/g, '');
-                        if (pc.length < 5) return;
-                        setLookingUp(true);
-                        try {
-                          const res = await fetch(`https://api.postcodes.io/postcodes/${pc}`);
-                          const json = await res.json();
-                          if (json.status === 200 && json.result) {
-                            const r = json.result;
-                            setAddress((a) => ({
-                              ...a,
-                              city: r.admin_district || r.parish || '',
-                              postcode: r.postcode || a.postcode,
-                            }));
-                          }
-                        } catch {}
-                        setLookingUp(false);
-                      }}
-                    >
-                      {lookingUp ? (
-                        <ActivityIndicator size="small" color={COLORS.white} />
-                      ) : (
-                        <Ionicons name="search" size={16} color={COLORS.white} />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
+              </View>
+              <View>
+                <Text style={styles.fieldLabel}>City</Text>
+                <TextInput
+                  style={styles.input}
+                  value={address.city}
+                  onChangeText={(t) => setAddress((a) => ({ ...a, city: t }))}
+                  placeholder="London"
+                  placeholderTextColor={COLORS.textTertiary}
+                />
               </View>
 
               <View style={styles.contactDivider}>
@@ -1324,6 +1394,48 @@ export default function BookScreen() {
                 </View>
               </View>
 
+              {/* Payment and terms (website: invoice step deposit agreement) */}
+              <View style={styles.termsCard}>
+                <View style={styles.termsHead}>
+                  <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} />
+                  <Text style={styles.termsTitle}>Payment and deposit</Text>
+                </View>
+                <Text style={styles.termsBody}>{policy.depositMessage}</Text>
+                {!isQuoteBased ? (
+                  <View style={styles.termsAmounts}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.termsLabel}>Deposit ({policy.depositPercent}%)</Text>
+                      <Text style={styles.termsValue}>{'£'}{((breakdown.total * policy.depositPercent) / 100).toFixed(2)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.termsLabel}>Total</Text>
+                      <Text style={styles.termsValue}>{'£'}{breakdown.total.toFixed(2)}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                <Text style={styles.termsBody}>
+                  Nothing is charged now. A secure payment link is emailed once our team confirms your booking.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.termsCheckRow, termsAccepted && styles.termsCheckRowOn]}
+                  onPress={() => setTermsAccepted((v) => !v)}
+                  activeOpacity={0.75}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: termsAccepted }}
+                >
+                  <View style={[styles.smsCheckbox, termsAccepted && styles.smsCheckboxChecked]}>
+                    {termsAccepted && <Ionicons name="checkmark" size={14} color={COLORS.white} />}
+                  </View>
+                  <Text style={styles.termsCheckText}>
+                    I agree to the deposit and payment details above and the{' '}
+                    <Text style={styles.termsLink} onPress={() => router.push('/terms')}>
+                      terms and conditions
+                    </Text>
+                    , including a {policy.shortNoticeFeePercent}% fee if I cancel within {policy.shortNoticeHours} hours of the appointment.
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity
                 style={styles.smsOptRow}
                 onPress={() => setSmsOptIn(!smsOptIn)}
@@ -1405,7 +1517,7 @@ export default function BookScreen() {
         <View style={styles.bottomBar}>
           {step === 'summary' ? (
             <TouchableOpacity
-              style={[styles.primaryBtn, submitting && styles.primaryBtnDisabled]}
+              style={[styles.primaryBtn, (submitting || !termsAccepted) && styles.primaryBtnDisabled]}
               onPress={handleSubmit}
               disabled={submitting}
               activeOpacity={0.8}
@@ -1458,18 +1570,41 @@ const summaryStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  slotGroupHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: SPACING.sm },
+  slotGroupLabel: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary },
+  termsCard: {
+    marginTop: SPACING.lg, padding: SPACING.base, borderRadius: RADIUS.lg, backgroundColor: COLORS.infoLight,
+    borderWidth: 1, borderColor: COLORS.primary + '30', gap: SPACING.sm,
+  },
+  termsHead: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  termsTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  termsBody: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 19 },
+  termsAmounts: { flexDirection: 'row', gap: SPACING.md, backgroundColor: COLORS.white, borderRadius: RADIUS.md, padding: SPACING.md },
+  termsLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textTertiary },
+  termsValue: { fontSize: 18, fontWeight: '800', color: COLORS.text, marginTop: 2 },
+  termsCheckRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.md,
+    backgroundColor: COLORS.white, borderWidth: 1.5, borderColor: COLORS.border,
+  },
+  termsCheckRowOn: { borderColor: COLORS.primary },
+  termsCheckText: { flex: 1, fontSize: 13, color: COLORS.text, lineHeight: 19 },
+  termsLink: { color: COLORS.primary, fontWeight: '700', textDecorationLine: 'underline' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
   },
-  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
-  headerLogo: { width: 120, height: 40 },
-  stepIndicator: { fontSize: 13, color: COLORS.textTertiary, minWidth: 36, textAlign: 'right' },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.borderLight,
+  },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  stepIndicator: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   progressTrack: {
-    height: 3, backgroundColor: COLORS.borderLight,
+    height: 5, backgroundColor: COLORS.borderLight, marginTop: 2,
     marginHorizontal: SPACING.lg, borderRadius: 2, overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: 2 },

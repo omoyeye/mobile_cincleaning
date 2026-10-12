@@ -1,9 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { pushApi } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, PUSH_TOKEN_KEY } from '../contexts/AuthContext';
+import { COLORS } from '../constants/config';
 
 let Notifications: typeof import('expo-notifications') | null = null;
 try {
@@ -22,15 +25,29 @@ try {
 export function usePushNotifications() {
   const { user } = useAuth();
   const router = useRouter();
-  const registered = useRef(false);
+  // The user id the token was last sent for, so a different person signing in re-registers.
+  const registeredFor = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!user || registered.current || !Notifications) return;
+    if (!user) {
+      registeredFor.current = null;
+      return;
+    }
+    if (registeredFor.current === user.id || !Notifications || Platform.OS === 'web') return;
 
     (async () => {
       if (!Device.isDevice) return;
 
       try {
+        // Android 13+ only shows the permission prompt once a channel exists.
+        if (Platform.OS === 'android') {
+          await Notifications!.setNotificationChannelAsync('default', {
+            name: 'Bookings and jobs',
+            importance: Notifications!.AndroidImportance.HIGH,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: COLORS.primary,
+          });
+        }
         const { status: existing } = await Notifications!.getPermissionsAsync();
         let finalStatus = existing;
         if (existing !== 'granted') {
@@ -39,11 +56,19 @@ export function usePushNotifications() {
         }
         if (finalStatus !== 'granted') return;
 
-        const tokenData = await Notifications!.getExpoPushTokenAsync();
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+        if (!projectId) {
+          console.warn('Push notifications need an EAS project id (run "eas init").');
+          return;
+        }
+        const tokenData = await Notifications!.getExpoPushTokenAsync({ projectId });
         const platform = Platform.OS === 'ios' ? 'ios' : 'android';
         await pushApi.registerToken(tokenData.data, platform as 'ios' | 'android');
-        registered.current = true;
-      } catch {}
+        await AsyncStorage.setItem(PUSH_TOKEN_KEY, tokenData.data).catch(() => {});
+        registeredFor.current = user.id;
+      } catch (err) {
+        console.warn('Push registration failed', err);
+      }
     })();
   }, [user]);
 
@@ -63,7 +88,7 @@ export function usePushNotifications() {
       } else if (data.bookingId) {
         router.push(`/booking/${data.bookingId}`);
       } else if (data.type === 'invoice') {
-        router.push(isStaff ? '/(staff)/earnings' : '/(customer)/bookings');
+        router.push(isStaff ? '/(staff)/earnings' : '/invoices');
       } else {
         const role = user?.role;
         if (role === 'staff') router.push('/(staff)');

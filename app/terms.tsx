@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBack } from '../utils/navigation';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
 
 const TERMS_SECTIONS = [
@@ -20,7 +21,7 @@ const TERMS_SECTIONS = [
   },
   {
     title: 'Company Information',
-    body: 'CiN Cleaning Ltd is registered in England and Wales. Registered address: [Registered Address]. Company number: [Company Number]. VAT number: [VAT Number]. Contact: info@cleanitneatly.com.',
+    body: 'CiN Cleaning Ltd is registered in England and Wales. Registered address: [Registered Address]. Company number: [Company Number]. VAT number: [VAT Number]. Contact: support@cleanitneatly.com.',
   },
   {
     title: 'Booking & Payment',
@@ -56,7 +57,7 @@ const TERMS_SECTIONS = [
   },
   {
     title: 'Dispute Resolution',
-    body: 'If you have a complaint, please contact us first at info@cleanitneatly.com and we will try to resolve it promptly. If we cannot resolve your complaint, you may refer it to an Alternative Dispute Resolution (ADR) provider. You can also contact Citizens Advice or the relevant trading standards office. As required by the Consumer Rights Act 2015, we provide this information about ADR.',
+    body: 'If you have a complaint, please contact us first at support@cleanitneatly.com and we will try to resolve it promptly. If we cannot resolve your complaint, you may refer it to an Alternative Dispute Resolution (ADR) provider. You can also contact Citizens Advice or the relevant trading standards office. As required by the Consumer Rights Act 2015, we provide this information about ADR.',
   },
   {
     title: 'Governing Law',
@@ -67,7 +68,7 @@ const TERMS_SECTIONS = [
 const PRIVACY_SECTIONS = [
   {
     title: '1. Data Controller',
-    body: 'CiN Cleaning Ltd ("we", "us", "our") is the data controller responsible for your personal data. Registered address: [Registered Address]. Company number: [Company Number]. Email: info@cleanitneatly.com. If you have questions about how we handle your data, contact our Data Protection Lead at dpo@cleanitneatly.com.',
+    body: 'CiN Cleaning Ltd ("we", "us", "our") is the data controller responsible for your personal data. Registered address: [Registered Address]. Company number: [Company Number]. Email: support@cleanitneatly.com. If you have questions about how we handle your data, contact our Data Protection Lead at dpo@cleanitneatly.com.',
   },
   {
     title: '2. Data We Collect',
@@ -95,7 +96,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: '8. Your Rights',
-    body: 'Under UK GDPR, you have the right to:\n\n• Access: request a copy of your personal data\n• Rectification: correct inaccurate or incomplete data\n• Erasure: request deletion of your data ("right to be forgotten")\n• Restrict processing: limit how we use your data\n• Data portability: receive your data in a structured, machine-readable format\n• Object: object to processing based on legitimate interest\n• Withdraw consent: withdraw any consent at any time without affecting the lawfulness of prior processing\n\nTo exercise any of these rights, contact us at info@cleanitneatly.com or use the "Delete My Account" and "Download My Data" options in the app. We will respond within 30 days.',
+    body: 'Under UK GDPR, you have the right to:\n\n• Access: request a copy of your personal data\n• Rectification: correct inaccurate or incomplete data\n• Erasure: request deletion of your data ("right to be forgotten")\n• Restrict processing: limit how we use your data\n• Data portability: receive your data in a structured, machine-readable format\n• Object: object to processing based on legitimate interest\n• Withdraw consent: withdraw any consent at any time without affecting the lawfulness of prior processing\n\nTo exercise any of these rights, contact us at support@cleanitneatly.com or use the "Delete My Account" and "Download My Data" options in the app. We will respond within 30 days.',
   },
   {
     title: '9. Automated Decision-Making',
@@ -111,7 +112,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: '12. Complaints',
-    body: 'If you are unhappy with how we handle your data, please contact us first at info@cleanitneatly.com and we will try to resolve your concern. You also have the right to lodge a complaint with the Information Commissioner\'s Office (ICO):\n\nInformation Commissioner\'s Office\nWycliffe House, Water Lane\nWilmslow, Cheshire SK9 5AF\nTel: 0303 123 1113\nWebsite: ico.org.uk',
+    body: 'If you are unhappy with how we handle your data, please contact us first at support@cleanitneatly.com and we will try to resolve your concern. You also have the right to lodge a complaint with the Information Commissioner\'s Office (ICO):\n\nInformation Commissioner\'s Office\nWycliffe House, Water Lane\nWilmslow, Cheshire SK9 5AF\nTel: 0303 123 1113\nWebsite: ico.org.uk',
   },
 ];
 
@@ -160,7 +161,7 @@ export default function TermsScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBack(router)}
           style={styles.backBtn}
           accessibilityRole="button"
           accessibilityLabel="Go back"
@@ -210,7 +211,7 @@ export default function TermsScreen() {
 
         <Text style={styles.footer}>
           Last updated: September 2026 (v2.0){'\n'}
-          CiN Cleaning Ltd — info@cleanitneatly.com
+          CiN Cleaning Ltd — support@cleanitneatly.com
         </Text>
         <View style={{ height: 40 }} />
       </ScrollView>

@@ -1,5 +1,9 @@
 // The API (backend on DirectAdmin) is on its own subdomain; the website itself is on Vercel.
-export const API_BASE_URL = 'https://api.cleanitneatly.com';
+// EXPO_PUBLIC_API_URL overrides it for local testing (e.g. http://localhost:3002).
+export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL || 'https://api.cleanitneatly.com').replace(/\/+$/, '');
+
+/** The website, for pages the app opens in the browser (e.g. invoice payment). */
+export const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL || 'https://www.cleanitneatly.com').replace(/\/+$/, '');
 
 export const APP_NAME = 'CiN Cleaning';
 export const APP_VERSION = '1.0.0';

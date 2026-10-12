@@ -13,6 +13,7 @@ import {
   Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { goBack } from '../../utils/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
@@ -232,7 +233,7 @@ export default function RegisterScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account?</Text>
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity onPress={() => goBack(router)}>
               <Text style={styles.footerLink}> Sign in</Text>
             </TouchableOpacity>
           </View>

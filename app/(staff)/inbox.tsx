@@ -13,12 +13,14 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { staffApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, ScreenHeader } from '../../components/staff/StaffKit';
-import type { Notification, DirectMessage } from '../../types';
+import type { Booking, Notification, DirectMessage } from '../../types';
+import { alertTarget } from '../../utils/alerts';
 
 type InboxTab = 'alerts' | 'admin';
 
@@ -63,9 +65,15 @@ function getTypeColor(type: string) {
 }
 
 export default function InboxScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const [tab, setTab] = useState<InboxTab>('alerts');
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [jobs, setJobs] = useState<Booking[]>([]);
+
+  useEffect(() => {
+    staffApi.getBookings().then(setJobs).catch(() => {});
+  }, []);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -159,7 +167,7 @@ export default function InboxScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <BrandBar />
       <View style={{ paddingHorizontal: SPACING.lg }}>
-        <ScreenHeader title="Inbox" subtitle="Alerts and messages from the office." />
+        <ScreenHeader title="Inbox" subtitle="Alerts, client chats and messages from the office." />
       </View>
 
       <View style={styles.tabRow}>
@@ -172,6 +180,11 @@ export default function InboxScreen() {
           {unreadCount > 0 && (
             <View style={styles.tabBadge}><Text style={styles.tabBadgeText}>{unreadCount}</Text></View>
           )}
+        </TouchableOpacity>
+        {/* Client chats (website: Inbox > Chats) live on their own screen. */}
+        <TouchableOpacity style={styles.tabBtn} onPress={() => router.push('/messages')} accessibilityLabel="Client chats">
+          <Ionicons name="people-outline" size={16} color={COLORS.textTertiary} />
+          <Text style={styles.tabText}>Clients</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabBtn, tab === 'admin' && styles.tabBtnActive]}
@@ -206,7 +219,11 @@ export default function InboxScreen() {
               <TouchableOpacity
                 style={[styles.card, !item.isRead && styles.cardUnread]}
                 activeOpacity={0.7}
-                onPress={() => markRead(item.id)}
+                onPress={() => {
+                  markRead(item.id);
+                  const target = alertTarget(item, jobs, 'staff');
+                  if (target) router.push(target as any);
+                }}
               >
                 <View style={styles.cardTop}>
                   <View style={styles.cardTitleRow}>

@@ -9,184 +9,225 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { bookingsApi } from '../../services/api';
+import { useToast } from '../../components/Toast';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
-import type { ChatMessage } from '../../types';
+import { friendlyDay, serviceLabel } from '../../components/ClientKit';
+import { goBack } from '../../utils/navigation';
+import type { Booking, ChatMessage } from '../../types';
 
 const POLL_INTERVAL = 8000;
 
+const msgTime = (m: ChatMessage) => m.timestamp || m.createdAt || '';
+
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function clock(iso: string) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Booking chat between the client and their cleaner. Same rules as the website. */
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const router = useRouter();
+  const { showToast } = useToast();
+  const bookingId = Number(id);
+  const isStaff = user?.role === 'staff';
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [canChatNow, setCanChatNow] = useState(true);
+  const [closed, setClosed] = useState(false);
+  const [booking, setBooking] = useState<Booking | null>(null);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const bookingId = Number(id);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const listRef = useRef<FlatList>(null);
 
   const fetchMessages = useCallback(async () => {
     try {
-      const data = await bookingsApi.getChat(bookingId);
-      setMessages(data);
-    } catch {}
+      const thread = await bookingsApi.getChat(bookingId);
+      setMessages(thread.messages);
+      setCanChatNow(thread.canChatNow);
+      setClosed(thread.chatClosedByAdmin);
+      setLoadFailed(false);
+    } catch {
+      setLoadFailed(true);
+    }
     setLoading(false);
   }, [bookingId]);
 
   useEffect(() => {
+    bookingsApi.getOne(bookingId).then(setBooking).catch(() => {});
     fetchMessages();
-    pollRef.current = setInterval(fetchMessages, POLL_INTERVAL);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [fetchMessages]);
+    const poll = setInterval(fetchMessages, POLL_INTERVAL);
+    return () => clearInterval(poll);
+  }, [bookingId, fetchMessages]);
 
   const handleSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || !canChatNow || closed) return;
     setSending(true);
     try {
       await bookingsApi.sendChat(bookingId, trimmed);
       setText('');
       await fetchMessages();
-    } catch {
-      Alert.alert('Error', 'Could not send message.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not send message', 'error');
     }
     setSending(false);
   };
 
-  const isOwnMessage = (msg: ChatMessage) => msg.senderId === user?.id;
+  const isOwn = (m: ChatMessage) => String(m.senderId) === String(user?.id);
 
-  const formatTime = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatDateHeader = (iso: string) => {
-    const d = new Date(iso);
-    const today = new Date();
-    if (d.toDateString() === today.toDateString()) return 'Today';
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  };
-
-  const groupedMessages = messages.reduce<{ dateLabel: string; data: ChatMessage[] }[]>((acc, msg) => {
-    const label = formatDateHeader(msg.createdAt);
-    const lastGroup = acc[acc.length - 1];
-    if (lastGroup && lastGroup.dateLabel === label) {
-      lastGroup.data.push(msg);
-    } else {
-      acc.push({ dateLabel: label, data: [msg] });
+  const rows: ({ kind: 'day'; label: string; key: string } | { kind: 'msg'; msg: ChatMessage; key: string })[] = [];
+  let lastDay = '';
+  messages.forEach((m, i) => {
+    const label = dayLabel(msgTime(m));
+    if (label && label !== lastDay) {
+      rows.push({ kind: 'day', label, key: `day-${i}` });
+      lastDay = label;
     }
-    return acc;
-  }, []);
+    rows.push({ kind: 'msg', msg: m, key: `m-${m.id}-${i}` });
+  });
 
-  const flatData: (string | ChatMessage)[] = [];
-  for (const group of groupedMessages) {
-    flatData.push(group.dateLabel);
-    flatData.push(...group.data);
-  }
+  const otherParty = isStaff ? booking?.contact?.name || 'Client' : 'Your cleaner';
+  const subtitle = booking
+    ? `${serviceLabel(booking.serviceType)} · ${friendlyDay(String(booking.date).slice(0, 10))} ${booking.time || ''}`
+    : booking === null && !loading
+      ? ''
+      : 'Loading…';
 
-  if (loading) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
+  const locked = closed || !canChatNow;
+  const lockedText = closed
+    ? 'This chat was closed by our team after the clean.'
+    : 'Chat opens 10 minutes before the start time, once a cleaner is assigned.';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Header */}
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
-        <Image source={require('../../assets/brand-logo.png')} style={styles.headerLogo} resizeMode="contain" />
-        <View style={{ width: 36 }} />
+        <View style={styles.headerAvatar}>
+          <Ionicons name={isStaff ? 'person' : 'sparkles'} size={18} color={COLORS.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {otherParty}
+          </Text>
+          <Text style={styles.headerSub} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
+        {booking ? (
+          <TouchableOpacity
+            style={styles.headerAction}
+            onPress={() => router.push(isStaff ? `/job/${bookingId}` : `/booking/${bookingId}`)}
+            accessibilityLabel={isStaff ? 'Open job' : 'Open booking'}
+          >
+            <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={flatData}
-          keyExtractor={(item, index) =>
-            typeof item === 'string' ? `header-${index}` : String(item.id)
-          }
-          contentContainerStyle={styles.messageList}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <Ionicons name="chatbubbles-outline" size={48} color={COLORS.textTertiary} />
-              <Text style={styles.emptyChatText}>No messages yet</Text>
-              <Text style={styles.emptyChatSub}>Send a message to start the conversation</Text>
-            </View>
-          }
-          renderItem={({ item }) => {
-            if (typeof item === 'string') {
-              return (
-                <View style={styles.dateHeader}>
-                  <Text style={styles.dateHeaderText}>{item}</Text>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+          </View>
+        ) : (
+          <FlatList
+            ref={listRef}
+            data={rows}
+            keyExtractor={(r) => r.key}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name="chatbubbles-outline" size={28} color={COLORS.primary} />
                 </View>
-              );
-            }
-            const own = isOwnMessage(item);
-            return (
-              <View style={[styles.bubble, own ? styles.bubbleOwn : styles.bubbleOther]}>
-                {!own && <Text style={styles.senderName}>{item.senderName}</Text>}
-                <Text style={[styles.bubbleText, own ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
-                  {item.text}
-                </Text>
-                <Text style={[styles.bubbleTime, own ? styles.bubbleTimeOwn : styles.bubbleTimeOther]}>
-                  {formatTime(item.createdAt)}
+                <Text style={styles.emptyTitle}>{loadFailed ? 'Could not load messages' : 'No messages yet'}</Text>
+                <Text style={styles.emptySub}>
+                  {loadFailed
+                    ? 'Check your connection. We will keep trying.'
+                    : locked
+                      ? lockedText
+                      : isStaff
+                        ? 'Send the client a quick hello or an update.'
+                        : 'Say hello or share anything your cleaner should know.'}
                 </Text>
               </View>
-            );
-          }}
-        />
-
-        {/* Input */}
-        <View style={styles.inputBar}>
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            placeholder="Type a message..."
-            placeholderTextColor={COLORS.textTertiary}
-            multiline
-            maxLength={2000}
-            returnKeyType="default"
+            }
+            renderItem={({ item }) => {
+              if (item.kind === 'day') {
+                return (
+                  <View style={styles.day}>
+                    <Text style={styles.dayText}>{item.label}</Text>
+                  </View>
+                );
+              }
+              const own = isOwn(item.msg);
+              const fromOffice = item.msg.senderRole === 'admin';
+              return (
+                <View style={[styles.bubble, own ? styles.bubbleOwn : styles.bubbleOther, fromOffice && !own && styles.bubbleOffice]}>
+                  {!own ? (
+                    <Text style={[styles.sender, fromOffice && { color: COLORS.secondary }]}>
+                      {fromOffice ? `${item.msg.senderName || 'CiN'} · Office` : item.msg.senderName}
+                    </Text>
+                  ) : null}
+                  <Text style={[styles.bubbleText, own && { color: COLORS.white }]}>{item.msg.text}</Text>
+                  <Text style={[styles.bubbleTime, own && { color: 'rgba(255,255,255,0.75)' }]}>{clock(msgTime(item.msg))}</Text>
+                </View>
+              );
+            }}
           />
-          <TouchableOpacity
-            style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnDisabled]}
-            onPress={handleSend}
-            disabled={!text.trim() || sending}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <Ionicons name="send" size={18} color={COLORS.white} />
-            )}
-          </TouchableOpacity>
-        </View>
+        )}
+
+        {locked ? (
+          <View style={styles.lockedBar}>
+            <Ionicons name={closed ? 'lock-closed-outline' : 'time-outline'} size={18} color={COLORS.textSecondary} />
+            <Text style={styles.lockedText}>{lockedText}</Text>
+          </View>
+        ) : (
+          <View style={styles.inputBar}>
+            <TextInput
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              placeholder="Type a message"
+              placeholderTextColor={COLORS.textTertiary}
+              multiline
+              maxLength={1000}
+            />
+            <TouchableOpacity
+              style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnOff]}
+              onPress={handleSend}
+              disabled={!text.trim() || sending}
+              accessibilityLabel="Send message"
+            >
+              {sending ? <ActivityIndicator size="small" color={COLORS.white} /> : <Ionicons name="send" size={18} color={COLORS.white} />}
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -195,107 +236,73 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   flex: { flex: 1 },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.sm,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
-    backgroundColor: COLORS.surface,
   },
-  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
-  headerLogo: { width: 120, height: 40 },
+  backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  headerAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.primary + '14', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  headerSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  headerAction: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary + '12', alignItems: 'center', justifyContent: 'center' },
 
-  messageList: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    flexGrow: 1,
-    justifyContent: 'flex-end',
-  },
+  list: { padding: SPACING.base, flexGrow: 1 },
+  day: { alignItems: 'center', marginVertical: SPACING.sm },
+  dayText: { fontSize: 12, fontWeight: '600', color: COLORS.textTertiary, backgroundColor: COLORS.surfaceAlt, paddingHorizontal: 10, paddingVertical: 3, borderRadius: RADIUS.full, overflow: 'hidden' },
+  bubble: { maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18, marginBottom: 6 },
+  bubbleOwn: { alignSelf: 'flex-end', backgroundColor: COLORS.primary, borderBottomRightRadius: 6 },
+  bubbleOther: { alignSelf: 'flex-start', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.borderLight, borderBottomLeftRadius: 6 },
+  bubbleOffice: { backgroundColor: COLORS.successLight, borderColor: COLORS.secondary + '33' },
+  sender: { fontSize: 12, fontWeight: '700', color: COLORS.primary, marginBottom: 2 },
+  bubbleText: { fontSize: 15, lineHeight: 21, color: COLORS.text },
+  bubbleTime: { fontSize: 11, color: COLORS.textTertiary, marginTop: 3, alignSelf: 'flex-end' },
 
-  dateHeader: { alignItems: 'center', marginVertical: SPACING.md },
-  dateHeaderText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textTertiary,
-    backgroundColor: COLORS.surfaceAlt,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 4,
-    borderRadius: RADIUS.full,
-    overflow: 'hidden',
-  },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.xxxl, paddingHorizontal: SPACING.xl },
+  emptyIcon: { width: 60, height: 60, borderRadius: 20, backgroundColor: COLORS.primary + '12', alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.md },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  emptySub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginTop: 4, lineHeight: 20 },
 
-  bubble: {
-    maxWidth: '78%',
-    paddingHorizontal: SPACING.base,
-    paddingVertical: 10,
-    borderRadius: RADIUS.lg,
-    marginBottom: SPACING.xs,
-  },
-  bubbleOwn: {
-    backgroundColor: COLORS.primary,
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 4,
-  },
-  bubbleOther: {
-    backgroundColor: COLORS.surface,
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  senderName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.primary,
-    marginBottom: 2,
-  },
-  bubbleText: { fontSize: 15, lineHeight: 20 },
-  bubbleTextOwn: { color: COLORS.white },
-  bubbleTextOther: { color: COLORS.text },
-  bubbleTime: { fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },
-  bubbleTimeOwn: { color: 'rgba(255,255,255,0.6)' },
-  bubbleTimeOther: { color: COLORS.textTertiary },
-
-  emptyChat: {
+  lockedBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.xxxl * 2,
     gap: SPACING.sm,
+    margin: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surfaceAlt,
   },
-  emptyChatText: { fontSize: 16, fontWeight: '600', color: COLORS.textSecondary },
-  emptyChatSub: { fontSize: 13, color: COLORS.textTertiary },
-
+  lockedText: { flex: 1, fontSize: 14, color: COLORS.textSecondary, lineHeight: 19 },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    gap: SPACING.sm,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,
-    backgroundColor: COLORS.surface,
-    gap: SPACING.sm,
   },
   input: {
     flex: 1,
-    backgroundColor: COLORS.surfaceAlt,
-    borderRadius: RADIUS.lg,
+    minHeight: 44,
+    maxHeight: 120,
+    backgroundColor: COLORS.background,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     paddingHorizontal: SPACING.base,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    paddingTop: 11,
+    paddingBottom: 11,
     fontSize: 15,
     color: COLORS.text,
-    maxHeight: 100,
   },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendBtnDisabled: { opacity: 0.5 },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  sendBtnOff: { opacity: 0.45 },
 });

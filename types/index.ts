@@ -90,6 +90,9 @@ export interface Booking {
   hourlyRate?: number | string | null;
   /** ISO time the cleaner tapped "Start travel". */
   enRouteAt?: string | null;
+  depositTermsAcceptedAt?: string | null;
+  shortNoticeCancelFeeConsentedAt?: string | null;
+  paymentFeeEvidence?: { items?: PaymentEvidenceItem[] } | null;
   cleanerLocation?: CleanerLocation | null;
   lateNotices?: LateNotice[] | null;
   createdAt?: string;
@@ -204,6 +207,8 @@ export interface UserAccount {
   id: number;
   name: string;
   email: string;
+  /** Promotions by email/SMS; stored on the account so the website shows the same choice. */
+  marketingOptIn?: boolean;
   role?: string;
   isSuperadmin?: boolean;
   adminTabs?: string[];
@@ -219,13 +224,61 @@ export interface UserAccount {
 }
 
 export interface ChatMessage {
-  id: number;
-  bookingId: number;
-  senderId: number;
+  id: number | string;
+  bookingId?: number;
+  /** The server sends ids as strings. */
+  senderId: number | string;
   senderRole: string;
   senderName: string;
   text: string;
-  createdAt: string;
+  /** Server field; older builds used createdAt. */
+  timestamp?: string;
+  createdAt?: string;
+}
+
+/** GET /api/bookings/:id/chat */
+export interface ChatThread {
+  messages: ChatMessage[];
+  chatClosedByAdmin: boolean;
+  /** Opens 10 minutes before the start once a cleaner is assigned (same rule as the website). */
+  canChatNow: boolean;
+}
+
+export interface PaymentEvidenceItem {
+  kind: 'deposit' | 'cancellation_fee';
+  dataUrl: string;
+  uploadedAt: string;
+  fileName?: string;
+  note?: string;
+}
+
+/** Invoice the office sends a client (GET /api/my-invoices). */
+export interface CustomerInvoice {
+  id: number;
+  invoiceNumber: string;
+  bookingId?: number | null;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'pending' | string;
+  subtotal?: number | string;
+  vatAmount?: number | string;
+  total: number | string;
+  dueDate?: string | null;
+  notes?: string | null;
+  stripePaymentUrl?: string | null;
+  items?: { description: string; quantity: number; unitPrice: number; lineTotal: number }[];
+  createdAt?: string;
+  paidAt?: string | null;
+}
+
+/** Cleaner details a client may see (GET /api/staff as a client). */
+export interface PublicStaff {
+  id: number;
+  name: string;
+  role?: string;
+  status?: string;
+  imageUrl?: string | null;
+  profilePhoto?: string | null;
+  rating?: number;
+  isVerified?: boolean;
 }
 
 export interface DiscountCode {
@@ -268,4 +321,62 @@ export interface StaffInvoice {
   status: string;
   adminNotes?: string;
   createdAt?: string;
+}
+
+/** GET /api/staff/me/performance (same numbers in the website staff portal and the app). */
+export interface StaffPerformanceJob {
+  id: number;
+  ref: string | null;
+  date: string;
+  time: string;
+  service: string;
+  client: string;
+  status: string;
+  hours: number;
+  pay: number;
+  minutesLate: number | null;
+  onTime: boolean | null;
+  rating: number | null;
+  feedback: string | null;
+  lateNotices: number;
+}
+
+export interface StaffPerformance {
+  staff: { id: number; name: string; role: string; status: string; hourlyRate: number; joinedAt: string | null };
+  summary: {
+    completed: number;
+    upcoming: number;
+    cancelled: number;
+    hoursWorked: number;
+    totalEarned: number;
+    todayEarned: number;
+    todayScheduled: number;
+    weekEarned: number;
+    monthEarned: number;
+    avgClientRating: number | null;
+    reviewCount: number;
+    compliments: number;
+    complaints: number;
+    punctualityPercent: number | null;
+    timedJobs: number;
+    lateNotices: number;
+    completionRate: number | null;
+    supervisorScore: number | null;
+    assessmentCount: number;
+    supervisorBreakdown: { punctuality: number | null; quality: number | null; professionalism: number | null };
+  };
+  months: { month: string; label: string; jobs: number; earned: number; hours: number; avgRating: number | null }[];
+  reviews: { id: number; ref: string | null; date: string; client: string; service: string; rating: number | null; feedback: string | null }[];
+  assessments: {
+    id: number;
+    bookingId: number | null;
+    assessorName: string;
+    rating: number;
+    punctuality: number | null;
+    quality: number | null;
+    professionalism: number | null;
+    remark: string;
+    createdAt: string | null;
+  }[];
+  recentJobs: StaffPerformanceJob[];
 }

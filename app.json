@@ -7,35 +7,43 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "cin-cleaning",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#4f46e5"
-    },
-    "newArchEnabled": false,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.cleanitneatly.cin",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "We use your location for job directions and, while you are travelling to a job, to share your live position with the office and the client.",
+        "NSLocationWhenInUseUsageDescription": "We use your location for job directions and, while you are travelling to a job, to share your live position with the office and the client. Sharing stops when you arrive.",
         "NSCameraUsageDescription": "Take photos of completed work for job reports.",
-        "NSPhotoLibraryUsageDescription": "Upload photos for your profile or work completion reports."
+        "NSPhotoLibraryUsageDescription": "Upload photos for your profile or work completion reports.",
+        "UIBackgroundModes": [
+          "location"
+        ]
+      },
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.cleanitneatly.cin",
       "adaptiveIcon": {
-        "backgroundColor": "#4f46e5",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png"
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
-        "READ_EXTERNAL_STORAGE"
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
       ],
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 1,
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -55,19 +63,33 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow CiN to access your location for job directions and tracking."
+          "locationWhenInUsePermission": "Allow CiN to use your location for job directions and to share your position while you travel to a job.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isAndroidBackgroundLocationEnabled": false
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow CiN to take photos for work completion reports."
+          "cameraPermission": "Allow CiN to take photos for work completion reports.",
+          "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
           "photosPermission": "Allow CiN to access your photos for profile and work reports."
+        }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
         }
       ]
     ],
