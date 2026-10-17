@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../services/api';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UK_POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i;
+
+function normalizePostcode(raw: string): string {
+  const compact = raw.replace(/\s+/g, '').toUpperCase();
+  return compact.length < 5 ? compact : `${compact.slice(0, -3)} ${compact.slice(-3)}`;
+}
+
 export default function EditProfileScreen() {
   const { user, refreshUser } = useAuth();
   const router = useRouter();
@@ -29,7 +37,43 @@ export default function EditProfileScreen() {
   const [phone, setPhone] = useState(user?.phone || '');
   const [address, setAddress] = useState(user?.address || '');
   const [postcode, setPostcode] = useState(user?.postcode || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [saving, setSaving] = useState(false);
+  const [pcCheck, setPcCheck] = useState<{ loading: boolean; note: string; error: string }>({ loading: false, note: '', error: '' });
+
+  // The account can finish loading after this screen opens (e.g. a refresh): fill the form then.
+  useEffect(() => {
+    if (!user) return;
+    setName((v) => v || user.name || '');
+    setEmail((v) => v || user.email || '');
+    setPhone((v) => v || user.phone || '');
+    setAddress((v) => v || user.address || '');
+    setPostcode((v) => v || user.postcode || '');
+    setAvatarUri((v) => v || user.imageUrl || '');
+  }, [user?.id]);
+
+  /** Same check as the website: tidy the postcode and confirm it exists with postcodes.io. */
+  const verifyPostcode = async () => {
+    const pc = normalizePostcode(postcode);
+    if (!pc) {
+      setPcCheck({ loading: false, note: '', error: 'Enter a postcode first.' });
+      return;
+    }
+    setPcCheck({ loading: true, note: '', error: '' });
+    try {
+      const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pc)}`);
+      if (!res.ok) {
+        setPcCheck({ loading: false, note: '', error: res.status === 404 ? 'Postcode not found.' : 'Lookup failed, try again.' });
+        return;
+      }
+      const r = (await res.json())?.result;
+      const bits = [r?.admin_ward, r?.admin_district, r?.region].filter(Boolean);
+      setPostcode(pc);
+      setPcCheck({ loading: false, note: bits.length ? `Valid UK postcode: ${bits.join(', ')}` : 'Valid UK postcode.', error: '' });
+    } catch {
+      setPcCheck({ loading: false, note: '', error: 'Lookup failed, try again.' });
+    }
+  };
 
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -74,14 +118,24 @@ export default function EditProfileScreen() {
       Alert.alert('Required', 'Name cannot be empty.');
       return;
     }
+    if (!EMAIL_RE.test(email.trim())) {
+      Alert.alert('Check your email', 'Please enter a valid email address.');
+      return;
+    }
+    const pc = postcode.trim() ? normalizePostcode(postcode) : '';
+    if (pc && !UK_POSTCODE.test(pc)) {
+      Alert.alert('Check your postcode', 'That postcode looks invalid. Please check and try again.');
+      return;
+    }
     if (!user) return;
     setSaving(true);
     try {
       await authApi.updateProfile(user.id, {
         name: name.trim(),
+        email: email.trim(),
         phone: phone.trim() || null,
         address: address.trim() || null,
-        postcode: postcode.trim() || null,
+        postcode: pc || null,
       });
       await refreshUser();
       Alert.alert('Saved', 'Your details have been updated.');
@@ -174,6 +228,20 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Email</Text>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                placeholderTextColor={COLORS.textTertiary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>Phone</Text>
               <TextInput
                 style={styles.input}
@@ -198,14 +266,28 @@ export default function EditProfileScreen() {
 
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>Postcode</Text>
-              <TextInput
-                style={styles.input}
-                value={postcode}
-                onChangeText={setPostcode}
-                placeholder="E.g. SW1A 1AA"
-                placeholderTextColor={COLORS.textTertiary}
-                autoCapitalize="characters"
-              />
+              <View style={styles.postcodeRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={postcode}
+                  onChangeText={(v) => {
+                    setPostcode(v.toUpperCase());
+                    setPcCheck({ loading: false, note: '', error: '' });
+                  }}
+                  placeholder="E.g. SW1A 1AA"
+                  placeholderTextColor={COLORS.textTertiary}
+                  autoCapitalize="characters"
+                />
+                <TouchableOpacity
+                  style={[styles.verifyBtn, (!postcode.trim() || pcCheck.loading) && { opacity: 0.5 }]}
+                  onPress={verifyPostcode}
+                  disabled={!postcode.trim() || pcCheck.loading}
+                >
+                  {pcCheck.loading ? <ActivityIndicator size="small" color={COLORS.white} /> : <Text style={styles.verifyText}>Verify</Text>}
+                </TouchableOpacity>
+              </View>
+              {pcCheck.note ? <Text style={styles.pcNote}>{pcCheck.note}</Text> : null}
+              {pcCheck.error ? <Text style={styles.pcError}>{pcCheck.error}</Text> : null}
             </View>
 
             <TouchableOpacity
@@ -340,6 +422,11 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   fieldGroup: { marginBottom: SPACING.md },
+  postcodeRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' },
+  verifyBtn: { backgroundColor: COLORS.text, borderRadius: RADIUS.md, paddingHorizontal: 16, height: 48, justifyContent: 'center', alignItems: 'center', minWidth: 76 },
+  verifyText: { color: COLORS.white, fontWeight: '700', fontSize: 14 },
+  pcNote: { fontSize: 12, fontWeight: '600', color: COLORS.secondary, marginTop: 6 },
+  pcError: { fontSize: 12, fontWeight: '600', color: COLORS.error, marginTop: 6 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary, marginBottom: SPACING.xs },
   input: {
     backgroundColor: COLORS.surfaceAlt,

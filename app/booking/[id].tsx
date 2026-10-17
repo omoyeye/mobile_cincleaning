@@ -26,8 +26,13 @@ import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking, BookingTracking } from '../../types';
 import { distanceKm, formatClock, isTodayYmd, minutesAgo } from '../../utils/tracking';
 import { StatusBadge, friendlyDay, serviceLabel, money } from '../../components/ClientKit';
+import { Image as Photo } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { FadeInUp, PulseDot } from '../../components/Motion';
+import { servicePhoto } from '../../components/media';
 import { AssignedCleaners, BookingPayments } from '../../components/BookingPayments';
 import { useBusinessContact } from '../../hooks/useBusinessContact';
+import { addBookingToCalendar, prepChecklistFor } from '../../utils/clientPortal';
 
 /** Where the booking is on its journey, for the step tracker at the top. */
 function journeyStep(b: Booking, enRouteAt: string | null, arrived: boolean): number {
@@ -175,7 +180,7 @@ export default function BookingDetailScreen() {
     const shortNotice = hoursUntil(booking.date, booking.time) < policy.shortNoticeHours;
     const fee = (Number(booking.totalPrice) || 0) * (policy.shortNoticeFeePercent / 100);
     const msg = shortNotice
-      ? `${policy.cancellationMessage}\n\nFee for this booking: ${money(fee)}. Do you agree and want to cancel?`
+      ? `${policy.cancellationMessage}\n\nFee for this booking: ${money(fee)}. You can pay it by bank transfer using the details shown on this booking afterwards, then upload the proof.\n\nDo you agree and want to cancel?`
       : 'Are you sure you want to cancel this booking? There is no fee because it is more than ' +
         `${policy.shortNoticeHours} hours away.`;
 
@@ -316,7 +321,11 @@ export default function BookingDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Summary */}
-        <View style={styles.hero}>
+        <FadeInUp style={styles.hero}>
+          <View style={styles.heroPhotoWrap}>
+            <Photo source={servicePhoto(booking.serviceType)} style={[styles.heroPhoto, cancelled && { opacity: 0.5 }]} contentFit="cover" transition={300} />
+            <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.9)', COLORS.surface]} locations={[0.35, 0.85, 1]} style={StyleSheet.absoluteFill} />
+          </View>
           <View style={styles.heroTop}>
             <StatusBadge status={booking.status} />
             <Text style={styles.heroPrice}>{money(booking.totalPrice)}</Text>
@@ -352,13 +361,13 @@ export default function BookingDetailScreen() {
               })}
             </View>
           )}
-        </View>
+        </FadeInUp>
 
         {/* Live tracking (client, day of the job) */}
         {trackLive && (
           <View style={[styles.card, styles.liveCard]}>
             <View style={styles.cardIconRow}>
-              <View style={[styles.liveDot, enRouteAt ? styles.liveDotOn : null]} />
+              {enRouteAt ? <PulseDot color={COLORS.secondary} size={10} /> : <View style={styles.liveDot} />}
               <Text style={styles.cardLabel}>Live status</Text>
             </View>
             {enRouteAt ? (
@@ -437,6 +446,29 @@ export default function BookingDetailScreen() {
             />
           ) : null}
         </View>
+
+        {!isStaff && canCancel ? (
+          <View style={styles.prepCard}>
+            <View style={styles.cardIconRow}>
+              <Ionicons name="clipboard-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.cardLabel}>Before we arrive</Text>
+            </View>
+            {prepChecklistFor(booking.serviceType).map((tip) => (
+              <View key={tip} style={styles.prepRow}>
+                <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.secondary} style={{ marginTop: 1 }} />
+                <Text style={styles.prepText}>{tip}</Text>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={styles.calendarBtn}
+              onPress={() => addBookingToCalendar(booking).catch((e) => showToast(e instanceof Error ? e.message : 'Could not open your calendar', 'error'))}
+              accessibilityRole="button"
+            >
+              <Ionicons name="calendar-outline" size={17} color={COLORS.primary} />
+              <Text style={styles.calendarBtnText}>Add to calendar</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {!isStaff ? (
           <>
@@ -542,6 +574,17 @@ export default function BookingDetailScreen() {
             >
               <Ionicons name="play-circle-outline" size={18} color={COLORS.white} />
               <Text style={styles.actionBtnTextWhite}>Start Job</Text>
+            </TouchableOpacity>
+          )}
+
+          {!isStaff && booking.status === 'Completed' && (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnPrimary]}
+              onPress={() => router.push(`/book?reorder=${booking.id}`)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="repeat-outline" size={18} color={COLORS.white} />
+              <Text style={styles.actionBtnTextWhite}>Book this clean again</Text>
             </TouchableOpacity>
           )}
 
@@ -796,6 +839,8 @@ const pickerStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   headerRef: { fontSize: 12, color: COLORS.textTertiary, marginTop: 1, letterSpacing: 0.3 },
+  heroPhotoWrap: { height: 120, marginTop: -SPACING.lg, marginHorizontal: -SPACING.lg, marginBottom: SPACING.sm, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, overflow: 'hidden' },
+  heroPhoto: { width: '100%', height: '100%' },
   hero: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xl,
@@ -903,6 +948,29 @@ const styles = StyleSheet.create({
     borderColor: COLORS.borderLight,
   },
   cardIconRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
+  prepCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.base,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  prepRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: 6 },
+  prepText: { flex: 1, fontSize: 14, color: COLORS.text, lineHeight: 20 },
+  calendarBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: SPACING.sm,
+    paddingVertical: 11,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '40',
+    backgroundColor: COLORS.primary + '0d',
+  },
+  calendarBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
   cardRow: { flexDirection: 'row', gap: SPACING.xl },
   cardCol: { flex: 1 },
   cardDivider: { height: 1, backgroundColor: COLORS.borderLight, marginVertical: SPACING.sm },

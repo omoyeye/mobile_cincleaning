@@ -4,6 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
 import { StatusBadge, localYmd, friendlyDay } from './staff/StaffKit';
 import type { Booking } from '../types';
+import { Image as Photo } from 'expo-image';
+import { PhotoBackdrop, PressableScale, PulseDot, Shine } from './Motion';
+import { servicePhoto } from './media';
+import { paymentProofNeeded } from '../utils/clientPortal';
 
 /**
  * Client-side building blocks. Same look as the staff screens (StaffKit) so the whole app feels
@@ -85,14 +89,22 @@ export function BookingCard({ booking, onPress, style }: { booking: Booking; onP
   const done = booking.status === 'Completed';
   const cancelled = booking.status === 'Cancelled';
   const where = [booking.address?.line1, booking.address?.postcode].filter(Boolean).join(', ');
+  const proof = paymentProofNeeded(booking);
   return (
-    <TouchableOpacity style={[ck.booking, style]} activeOpacity={0.75} onPress={onPress} accessibilityRole="button">
+    <PressableScale style={[ck.booking, style]} onPress={onPress} accessibilityRole="button">
       <View style={[ck.dateTile, done && ck.dateTileDone, cancelled && ck.dateTileCancelled]}>
         <Text style={[ck.dateMonth, done && { color: COLORS.status.completed }, cancelled && { color: COLORS.textTertiary }]}>{parts.month}</Text>
         <Text style={[ck.dateDay, done && { color: COLORS.status.completed }, cancelled && { color: COLORS.textTertiary }]}>{parts.day}</Text>
         <Text style={ck.dateWeekday}>{parts.weekday}</Text>
       </View>
       <View style={ck.bookingBody}>
+        <Photo
+          source={servicePhoto(booking.serviceType)}
+          style={[ck.bookingThumb, cancelled && { opacity: 0.45 }]}
+          contentFit="cover"
+          transition={250}
+          accessibilityIgnoresInvertColors
+        />
         <Text style={[ck.bookingTitle, cancelled && ck.strike]} numberOfLines={2}>
           {serviceLabel(booking.serviceType)}
         </Text>
@@ -114,8 +126,14 @@ export function BookingCard({ booking, onPress, style }: { booking: Booking; onP
           <StatusBadge status={booking.status} />
           <Text style={ck.price}>{money(booking.totalPrice)}</Text>
         </View>
+        {proof.show ? (
+          <View style={ck.proofHint}>
+            <Ionicons name="cloud-upload-outline" size={14} color={COLORS.secondary} />
+            <Text style={ck.proofHintText} numberOfLines={2}>{proof.message}</Text>
+          </View>
+        ) : null}
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
@@ -124,14 +142,19 @@ export function NextCleanCard({ booking, onPress }: { booking: Booking; onPress:
   const ymd = bookingYmd(booking);
   const onTheWay = !!booking.enRouteAt && booking.status !== 'Completed';
   return (
-    <TouchableOpacity style={ck.next} activeOpacity={0.88} onPress={onPress} accessibilityRole="button">
-      <View style={ck.nextGlow} />
-      <View style={ck.nextGlow2} />
+    <PressableScale style={ck.nextShadow} onPress={onPress} accessibilityRole="button" scaleTo={0.98}>
+     <PhotoBackdrop
+      source={servicePhoto(booking.serviceType)}
+      style={ck.next}
+      colors={['rgba(12,135,214,0.35)', 'rgba(10,106,171,0.86)', 'rgba(8,62,104,0.96)']}
+      locations={[0, 0.5, 1]}
+     >
+      <Shine />
       <View style={ck.nextHead}>
         <Text style={ck.nextEyebrow}>Your next clean</Text>
         {onTheWay ? (
           <View style={ck.livePill}>
-            <View style={ck.liveDot} />
+            <PulseDot color={COLORS.secondary} />
             <Text style={ck.livePillText}>Cleaner on the way</Text>
           </View>
         ) : (
@@ -159,7 +182,8 @@ export function NextCleanCard({ booking, onPress }: { booking: Booking; onPress:
           <Ionicons name="chevron-forward" size={15} color={COLORS.primary} />
         </View>
       </View>
-    </TouchableOpacity>
+     </PhotoBackdrop>
+    </PressableScale>
   );
 }
 
@@ -175,14 +199,14 @@ export function QuickAction({
   tint?: string;
 }) {
   return (
-    <TouchableOpacity style={ck.quick} activeOpacity={0.75} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+    <PressableScale style={ck.quick} onPress={onPress} accessibilityRole="button" accessibilityLabel={label} scaleTo={0.94}>
       <View style={[ck.quickIcon, { backgroundColor: tint + '14' }]}>
         <Ionicons name={icon} size={22} color={tint} />
       </View>
       <Text style={ck.quickLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
         {label}
       </Text>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
@@ -345,24 +369,40 @@ export const ck = StyleSheet.create({
   dateWeekday: { fontSize: 11, color: COLORS.textSecondary },
   bookingBody: { flex: 1, padding: SPACING.md },
   bookingTop: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  bookingTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, lineHeight: 20 },
+  bookingTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, lineHeight: 20, paddingRight: 56 },
+  bookingThumb: { position: 'absolute', top: SPACING.md, right: SPACING.md, width: 48, height: 48, borderRadius: 12, backgroundColor: COLORS.surfaceAlt },
   strike: { textDecorationLine: 'line-through', color: COLORS.textSecondary },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5 },
   meta: { flex: 1, fontSize: 13, color: COLORS.textSecondary },
   bookingFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.sm },
   ref: { fontSize: 11, color: COLORS.textTertiary, letterSpacing: 0.3 },
   price: { fontSize: 16, fontWeight: '800', color: COLORS.text },
+  proofHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: SPACING.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.successLight,
+  },
+  proofHintText: { flex: 1, fontSize: 12, fontWeight: '700', color: COLORS.secondary },
 
-  next: {
-    backgroundColor: COLORS.primary,
+  nextShadow: {
     borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    overflow: 'hidden',
+    backgroundColor: COLORS.primary,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 16,
     elevation: 6,
+  },
+  next: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    minHeight: 200,
   },
   nextGlow: { position: 'absolute', right: -50, top: -60, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.12)' },
   nextGlow2: { position: 'absolute', left: -40, bottom: -70, width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(255,255,255,0.07)' },

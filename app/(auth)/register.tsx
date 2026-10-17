@@ -17,6 +17,8 @@ import { goBack } from '../../utils/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { AuthHero } from '../../components/AuthHero';
+import { PHOTOS } from '../../components/media';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function RegisterScreen() {
@@ -82,15 +84,7 @@ export default function RegisterScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.header}>
-            <Image
-              source={require('../../assets/brand-logo.png')}
-              style={styles.brandLogo}
-              resizeMode="contain"
-            />
-            <Text style={styles.title}>Create account</Text>
-            <Text style={styles.subtitle}>Book your first clean today</Text>
-          </View>
+          <AuthHero photo={PHOTOS.lounge} title="Create account" subtitle="Book your first clean today" />
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>

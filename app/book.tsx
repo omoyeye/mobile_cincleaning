@@ -14,14 +14,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { goBack } from '../utils/navigation';
 import { useBusinessContact } from '../hooks/useBusinessContact';
 import { useToast } from '../components/Toast';
+import { Image as Photo } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { FadeInUp, PressableScale } from '../components/Motion';
+import { servicePhoto, wrapName } from '../components/media';
 import { useAuth } from '../contexts/AuthContext';
 import { publicApi, bookingsApi } from '../services/api';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
-import type { ServiceConfig, Extra, SelectedExtra, PropertyDetails } from '../types';
+import type { Booking, ServiceConfig, Extra, SelectedExtra, PropertyDetails } from '../types';
 import { calculateHourlyPrice, hourlyRateFor, londonRateOf, lookupPricingRegion, type PricingRegion } from '../utils/pricing';
 
 /** Mobile materials options -> the keys the website and API use. */
@@ -122,6 +126,9 @@ export default function BookScreen() {
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
   const [selectedService, setSelectedService] = useState<ServiceConfig | null>(null);
+  const { service: serviceParam, reorder: reorderParam } = useLocalSearchParams<{ service?: string; reorder?: string }>();
+  /** "Book again" from a past booking: copied in once the service is chosen (same fields the website's Reorder copies). */
+  const pendingReorder = useRef<Booking | null>(null);
   const [property, setProperty] = useState<PropertyDetails>({
     bedrooms: 1, bathrooms: 1, toilets: 0, livingRooms: 1, kitchens: 1,
     receptionRooms: 0, utilityRooms: 0, clockRoomToilets: 0, carpetSteamCleaning: 0,
@@ -157,6 +164,8 @@ export default function BookScreen() {
   const [smsOptIn, setSmsOptIn] = useState(false);
   /** Same agreement the website asks for; the server refuses bookings without it. */
   const [termsAccepted, setTermsAccepted] = useState(false);
+  /** Pay the deposit now (default) or pay in full; the payment link is set to match. */
+  const [paymentChoice, setPaymentChoice] = useState<'deposit' | 'full'>('deposit');
   const policy = useBusinessContact();
   const { showToast } = useToast();
 
@@ -242,8 +251,29 @@ export default function BookScreen() {
     (async () => {
       try {
         const [svc, ext] = await Promise.all([publicApi.getServices(), publicApi.getExtras()]);
-        setServices(svc.filter((s) => s.active));
+        const active = svc.filter((s) => s.active);
+        setServices(active);
         setExtras(ext);
+        // "Book again": start from a past booking. The client only picks a new date and time.
+        if (reorderParam && user) {
+          try {
+            const past = await bookingsApi.getOne(Number(reorderParam));
+            const hit = active.find((s) => s.name === past.serviceType || String(s.id) === String(past.serviceType));
+            if (hit) {
+              pendingReorder.current = past;
+              setSelectedService(hit);
+            } else {
+              showToast('That service is no longer offered. Please choose another.', 'warning');
+            }
+          } catch {
+            showToast('Could not load your past booking', 'error');
+          }
+        }
+        // Opened from "Explore services": start with that service chosen.
+        if (serviceParam && !reorderParam) {
+          const hit = active.find((s) => String(s.id) === String(serviceParam));
+          if (hit) setSelectedService(hit);
+        }
       } catch {}
       setLoading(false);
     })();
@@ -281,6 +311,42 @@ export default function BookScreen() {
       setMaterials('none');
       setCommercialDetails('');
     }
+  }, [selectedService]);
+
+  // Runs after the reset above, so the copied details are not wiped.
+  useEffect(() => {
+    const past = pendingReorder.current;
+    if (!past || !selectedService) return;
+    pendingReorder.current = null;
+    const pd = (past.propertyDetails || {}) as Partial<PropertyDetails> & Record<string, any>;
+    setProperty((p) => {
+      const next = { ...p } as Record<string, any>;
+      for (const k of Object.keys(p)) if (pd[k] != null) next[k] = pd[k];
+      return next as PropertyDetails;
+    });
+    const dur = Number(pd.duration) || 0;
+    if (dur > 0) {
+      setDurationHours(Math.floor(dur));
+      setDurationMinutes(dur % 1 >= 0.5 ? 30 : 0);
+    }
+    const mat = Object.entries(MATERIALS_KEY).find(([, v]) => v && v === pd.cleaningMaterials)?.[0] as MaterialsOption | undefined;
+    if (mat) setMaterials(mat);
+    if (Array.isArray(past.extras)) setSelectedExtras(past.extras.map((e) => ({ id: e.id, quantity: e.quantity || 1 })));
+    const freq = FREQUENCIES.find((f) => f === (past.frequency || pd.frequency));
+    if (freq) setFrequency(freq);
+    if (past.address) {
+      setAddress({
+        line1: past.address.line1 || '',
+        line2: (past.address as any).line2 || '',
+        city: past.address.city || '',
+        postcode: past.address.postcode || '',
+      });
+    }
+    if (past.contact?.phone && !contactPhone) setContactPhone(past.contact.phone);
+    setInstructions(past.instructions || '');
+    if (typeof pd.commercialDetails === 'string') setCommercialDetails(pd.commercialDetails);
+    setNotifyIfMoreTimeNeeded(!!pd.notifyIfMoreTimeNeeded);
+    showToast('Details copied from your last clean. Check them and pick a new date.', 'success');
   }, [selectedService]);
 
   const findExtraByName = useCallback((nameFragment: string): Extra | undefined => {
@@ -523,6 +589,7 @@ export default function BookScreen() {
         time,
         totalPrice: breakdown.total,
         depositTermsAccepted: termsAccepted,
+        paymentChoice: isQuoteBased ? 'deposit' : paymentChoice,
         address: { line1: address.line1, city: address.city, postcode: address.postcode },
         contact: { name: contactName, email: contactEmail, phone: contactPhone },
         propertyDetails: {
@@ -669,27 +736,36 @@ export default function BookScreen() {
                         ? `From ${'£'}${Number(svc.baseRate).toFixed(2)}/hr · London ${'£'}${londonRateOf(svc)!.toFixed(2)}/hr`
                         : `From ${'£'}${Number(svc.baseRate).toFixed(2)}/hr`;
                   return (
-                    <TouchableOpacity
-                      key={svc.id}
-                      style={[styles.serviceCard, active && styles.serviceCardActive]}
-                      activeOpacity={0.7}
-                      onPress={() => setSelectedService(svc)}
-                    >
-                      <View style={[styles.serviceIcon, active && styles.serviceIconActive]}>
-                        <Ionicons
-                          name={SERVICE_ICONS[svc.id] || SERVICE_ICONS[svcTrigger] || 'sparkles-outline'}
-                          size={24}
-                          color={active ? COLORS.white : COLORS.primary}
-                        />
-                      </View>
-                      <Text style={[styles.serviceName, active && styles.serviceNameActive]}>{svc.name}</Text>
-                      <Text style={styles.servicePrice}>{priceLabel}</Text>
-                      {active && (
-                        <View style={styles.checkMark}>
-                          <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
+                    <FadeInUp key={svc.id} index={services.indexOf(svc)} style={styles.serviceCell}>
+                      <PressableScale
+                        style={[styles.serviceCard, active && styles.serviceCardActive]}
+                        onPress={() => setSelectedService(svc)}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={`${svc.name}, ${priceLabel}`}
+                      >
+                        <View style={styles.servicePhotoWrap}>
+                          <Photo source={servicePhoto(svc.name)} style={styles.servicePhoto} contentFit="cover" transition={300} />
+                          <LinearGradient colors={['rgba(12,31,51,0)', 'rgba(12,31,51,0.55)']} style={StyleSheet.absoluteFill} />
+                          <View style={[styles.serviceIcon, active && styles.serviceIconActive]}>
+                            <Ionicons
+                              name={SERVICE_ICONS[svc.id] || SERVICE_ICONS[svcTrigger] || 'sparkles-outline'}
+                              size={18}
+                              color={active ? COLORS.white : COLORS.primary}
+                            />
+                          </View>
+                          {active && (
+                            <View style={styles.checkMark}>
+                              <Ionicons name="checkmark-circle" size={24} color={COLORS.white} />
+                            </View>
+                          )}
                         </View>
-                      )}
-                    </TouchableOpacity>
+                        <View style={styles.serviceText}>
+                          <Text style={[styles.serviceName, active && styles.serviceNameActive]}>{wrapName(svc.name)}</Text>
+                          <Text style={styles.servicePrice}>{priceLabel}</Text>
+                        </View>
+                      </PressableScale>
+                    </FadeInUp>
                   );
                 })}
               </View>
@@ -1398,23 +1474,53 @@ export default function BookScreen() {
               <View style={styles.termsCard}>
                 <View style={styles.termsHead}>
                   <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} />
-                  <Text style={styles.termsTitle}>Payment and deposit</Text>
+                  <Text style={styles.termsTitle}>How would you like to pay?</Text>
                 </View>
-                <Text style={styles.termsBody}>{policy.depositMessage}</Text>
                 {!isQuoteBased ? (
-                  <View style={styles.termsAmounts}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.termsLabel}>Deposit ({policy.depositPercent}%)</Text>
-                      <Text style={styles.termsValue}>{'£'}{((breakdown.total * policy.depositPercent) / 100).toFixed(2)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.termsLabel}>Total</Text>
-                      <Text style={styles.termsValue}>{'£'}{breakdown.total.toFixed(2)}</Text>
-                    </View>
+                  <View style={styles.payOptions} accessibilityRole="radiogroup">
+                    {([
+                      {
+                        key: 'deposit' as const,
+                        title: `Pay ${policy.depositPercent}% deposit`,
+                        sub: `£${(breakdown.total - (breakdown.total * policy.depositPercent) / 100).toFixed(2)} balance due after your clean`,
+                        amount: (breakdown.total * policy.depositPercent) / 100,
+                        icon: 'wallet-outline' as const,
+                      },
+                      {
+                        key: 'full' as const,
+                        title: 'Pay in full',
+                        sub: 'Nothing more to pay after your clean',
+                        amount: breakdown.total,
+                        icon: 'card-outline' as const,
+                      },
+                    ]).map((opt) => {
+                      const on = paymentChoice === opt.key;
+                      return (
+                        <TouchableOpacity
+                          key={opt.key}
+                          style={[styles.payOption, on && styles.payOptionOn]}
+                          onPress={() => setPaymentChoice(opt.key)}
+                          activeOpacity={0.8}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: on }}
+                        >
+                          <View style={[styles.payOptionIcon, on && styles.payOptionIconOn]}>
+                            <Ionicons name={opt.icon} size={18} color={on ? COLORS.white : COLORS.textSecondary} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.payOptionTitle}>{opt.title}</Text>
+                            <Text style={styles.payOptionSub}>{opt.sub}</Text>
+                          </View>
+                          <Text style={styles.payOptionAmount}>£{opt.amount.toFixed(2)}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                ) : null}
+                ) : (
+                  <Text style={styles.termsBody}>{policy.depositMessage}</Text>
+                )}
                 <Text style={styles.termsBody}>
-                  Nothing is charged now. A secure payment link is emailed once our team confirms your booking.
+                  Nothing is charged now. A secure payment link is emailed once our team confirms your booking, and you can still switch between deposit and full payment there.
                 </Text>
                 <TouchableOpacity
                   style={[styles.termsCheckRow, termsAccepted && styles.termsCheckRowOn]}
@@ -1572,6 +1678,23 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   slotGroupHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: SPACING.sm },
   slotGroupLabel: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary },
+  payOptions: { gap: SPACING.sm, marginBottom: SPACING.sm },
+  payOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  payOptionOn: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + '0d' },
+  payOptionIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  payOptionIconOn: { backgroundColor: COLORS.primary },
+  payOptionTitle: { fontSize: 15, fontWeight: '800', color: COLORS.text },
+  payOptionSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  payOptionAmount: { fontSize: 16, fontWeight: '900', color: COLORS.text },
   termsCard: {
     marginTop: SPACING.lg, padding: SPACING.base, borderRadius: RADIUS.lg, backgroundColor: COLORS.infoLight,
     borderWidth: 1, borderColor: COLORS.primary + '30', gap: SPACING.sm,
@@ -1613,22 +1736,27 @@ const styles = StyleSheet.create({
   stepTitle: { fontSize: 22, fontWeight: '700', color: COLORS.text },
   stepSub: { fontSize: 14, color: COLORS.textSecondary, marginTop: 4, marginBottom: SPACING.lg },
 
-  serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: SPACING.md },
+  serviceCell: { width: '48.5%' },
   serviceCard: {
-    width: '48%', backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
-    padding: SPACING.base, borderWidth: 1.5, borderColor: COLORS.borderLight, position: 'relative',
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, overflow: 'hidden',
+    borderWidth: 1.5, borderColor: COLORS.borderLight,
+    shadowColor: '#0c1f33', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
   serviceCardActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + '08' },
+  servicePhotoWrap: { height: 92, backgroundColor: COLORS.surfaceAlt },
+  servicePhoto: { width: '100%', height: '100%' },
   serviceIcon: {
-    width: 44, height: 44, borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primary + '12',
-    justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.sm,
+    position: 'absolute', left: 10, bottom: 10,
+    width: 34, height: 34, borderRadius: 11, backgroundColor: COLORS.white,
+    justifyContent: 'center', alignItems: 'center',
   },
   serviceIconActive: { backgroundColor: COLORS.primary },
-  serviceName: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  serviceText: { padding: SPACING.md },
+  serviceName: { fontSize: 14, fontWeight: '700', color: COLORS.text },
   serviceNameActive: { color: COLORS.primary },
-  servicePrice: { fontSize: 12, color: COLORS.textTertiary, marginTop: 2 },
-  checkMark: { position: 'absolute', top: 10, right: 10 },
+  servicePrice: { fontSize: 12, color: COLORS.textSecondary, marginTop: 3, lineHeight: 16 },
+  checkMark: { position: 'absolute', top: 8, right: 8, backgroundColor: COLORS.primary, borderRadius: 14 },
 
   counterRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

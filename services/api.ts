@@ -150,8 +150,9 @@ export const bookingsApi = {
     frequency?: string;
     duration?: number;
     tipAmount?: number;
+    paymentChoice?: 'deposit' | 'full';
   }) =>
-    request<{ id: number; bookingId: string; message: string }>('/api/bookings', {
+    request<{ id: number; bookingId: string; message: string; stripePaymentLink?: string }>('/api/bookings', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

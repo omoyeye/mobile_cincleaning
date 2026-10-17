@@ -84,6 +84,14 @@ export interface Booking {
   chatClosedByAdmin?: boolean;
   chatClosedAt?: string | null;
   invoicePaid?: boolean;
+  /** Pay the deposit now or pay in full (chosen when booking). */
+  paymentChoice?: 'deposit' | 'full';
+  /** Server-calculated: paid so far, what is left, and where the booking is in paying. */
+  amountPaid?: number;
+  balanceDue?: number;
+  paymentStage?: 'unpaid' | 'deposit_paid' | 'paid';
+  depositAmount?: number;
+  paidInFullAt?: string | null;
   adminNotes?: string;
   stripePaymentLink?: string;
   priceRegion?: 'london' | 'standard' | null;

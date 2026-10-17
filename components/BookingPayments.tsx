@@ -9,6 +9,7 @@ import { useBusinessContact } from '../hooks/useBusinessContact';
 import { photoToDataUrl } from '../utils/photos';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
 import { money } from './ClientKit';
+import { paymentState } from '../utils/clientPortal';
 import type { Booking, PaymentEvidenceItem, PublicStaff } from '../types';
 
 /* ───────────── Assigned cleaners (website: "Assigned professionals") ───────────── */
@@ -100,8 +101,11 @@ export function BookingPayments({ booking, onChange }: { booking: Booking; onCha
 
   if (booking.status === 'Cancelled' && !booking.shortNoticeCancelFeeConsentedAt) return null;
 
+  // Deposit prompts only make sense before the clean happens.
+  const closed = booking.status === 'Cancelled' || booking.status === 'Completed';
   const total = Number(booking.totalPrice) || 0;
   const deposit = (total * policy.depositPercent) / 100;
+  const pay = paymentState(booking, policy.depositPercent);
   const proofs = booking.paymentFeeEvidence?.items ?? [];
   const showProof = !!(booking.depositTermsAcceptedAt || booking.shortNoticeCancelFeeConsentedAt);
   const bothKinds = !!(booking.depositTermsAcceptedAt && booking.shortNoticeCancelFeeConsentedAt);
@@ -162,38 +166,72 @@ export function BookingPayments({ booking, onChange }: { booking: Booking; onCha
           <Text style={styles.payLabel}>Booking total</Text>
           <Text style={styles.payValue}>{money(total)}</Text>
         </View>
-        {booking.status !== 'Cancelled' ? (
+        {pay.stage === 'deposit_paid' ? (
           <View style={{ flex: 1 }}>
-            <Text style={styles.payLabel}>Deposit ({policy.depositPercent}%)</Text>
-            <Text style={styles.payValue}>{money(deposit)}</Text>
+            <Text style={styles.payLabel}>Balance due</Text>
+            <Text style={[styles.payValue, { color: COLORS.primary }]}>{money(pay.balanceDue)}</Text>
+          </View>
+        ) : pay.stage === 'unpaid' && !closed ? (
+          <View style={{ flex: 1 }}>
+            <Text style={styles.payLabel}>{pay.choice === 'full' ? 'Paying in full' : `Deposit (${policy.depositPercent}%)`}</Text>
+            <Text style={styles.payValue}>{money(pay.payNowAmount)}</Text>
           </View>
         ) : null}
       </View>
 
-      {booking.invoicePaid ? (
+      {pay.stage === 'paid' ? (
         <View style={[styles.banner, { backgroundColor: COLORS.successLight }]}>
           <Ionicons name="checkmark-circle" size={20} color={COLORS.secondary} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.bannerTitle, { color: COLORS.secondary }]}>Deposit paid</Text>
-            <Text style={styles.bannerSub}>Payment confirmed. Thank you!</Text>
+            <Text style={[styles.bannerTitle, { color: COLORS.secondary }]}>Paid in full</Text>
+            <Text style={styles.bannerSub}>{money(pay.total)} received. Thank you!</Text>
           </View>
         </View>
-      ) : booking.stripePaymentLink && booking.status !== 'Cancelled' ? (
+      ) : pay.stage === 'deposit_paid' ? (
+        <>
+          <View style={[styles.banner, { backgroundColor: COLORS.successLight }]}>
+            <Ionicons name="checkmark-circle" size={20} color={COLORS.secondary} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitle, { color: COLORS.secondary }]}>Deposit paid: {money(pay.amountPaid)}</Text>
+              <Text style={styles.bannerSub}>
+                {booking.status === 'Completed'
+                  ? `Your clean is done. The balance of ${money(pay.balanceDue)} is now due.`
+                  : `The balance of ${money(pay.balanceDue)} is due after your clean. You can pay it early if you like.`}
+              </Text>
+            </View>
+          </View>
+          {booking.stripePaymentLink && booking.status !== 'Cancelled' ? (
+            <TouchableOpacity style={styles.payBtn} onPress={() => Linking.openURL(booking.stripePaymentLink!)} activeOpacity={0.85}>
+              <Ionicons name="card" size={18} color={COLORS.white} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.payBtnTitle}>{pay.payNowLabel}</Text>
+                <Text style={styles.payBtnSub}>Secure card payment by Stripe</Text>
+              </View>
+              <Ionicons name="open-outline" size={18} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+          ) : null}
+        </>
+      ) : booking.stripePaymentLink && !closed ? (
         <TouchableOpacity style={styles.payBtn} onPress={() => Linking.openURL(booking.stripePaymentLink!)} activeOpacity={0.85}>
           <Ionicons name="card" size={18} color={COLORS.white} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.payBtnTitle}>Pay deposit now</Text>
-            <Text style={styles.payBtnSub}>Secure card payment by Stripe</Text>
+            <Text style={styles.payBtnTitle}>{pay.payNowLabel}</Text>
+            <Text style={styles.payBtnSub}>
+              {pay.choice === 'full' ? 'Nothing more to pay after your clean' : 'Or switch to paying in full on the next screen'}
+            </Text>
           </View>
           <Ionicons name="open-outline" size={18} color="rgba(255,255,255,0.85)" />
         </TouchableOpacity>
-      ) : booking.status !== 'Cancelled' ? (
+      ) : !closed ? (
         <Text style={styles.hint}>
-          {policy.depositMessage} A secure payment link will be emailed to you once our team confirms the booking.
+          {pay.choice === 'full'
+            ? `You chose to pay in full (${money(pay.total)}).`
+            : `${policy.depositMessage} The balance of ${money(pay.total - pay.depositAmount)} is due after your clean.`}{' '}
+          A secure payment link will be emailed to you once our team confirms the booking.
         </Text>
       ) : null}
 
-      {booking.status !== 'Cancelled' ? (
+      {!closed ? (
         booking.depositTermsAcceptedAt ? (
           <View style={styles.ackDone}>
             <Ionicons name="document-text-outline" size={16} color={COLORS.secondary} />
@@ -216,6 +254,26 @@ export function BookingPayments({ booking, onChange }: { booking: Booking; onCha
         <View style={styles.proof}>
           <Text style={styles.proofTitle}>Paid by bank transfer?</Text>
           <Text style={styles.hint}>Upload a screenshot of the payment so we can match it to this booking. Include the reference, date and amount.</Text>
+          <View style={styles.bankBox}>
+            <Text style={styles.bankTitle}>Pay by bank transfer to</Text>
+            {policy.bankDetails.map((bank) => (
+              <View key={`${bank.accountNumber}-${bank.sortCode}`} style={styles.bankRow}>
+                <Text style={styles.bankName} selectable>{bank.accountName}</Text>
+                <Text style={styles.bankLine} selectable>Account number: {bank.accountNumber}</Text>
+                <Text style={styles.bankLine} selectable>Sort code: {bank.sortCode}</Text>
+                {bank.bankName ? <Text style={styles.bankLine} selectable>{bank.bankName}</Text> : null}
+                {bank.notes ? <Text style={styles.bankNote}>{bank.notes}</Text> : null}
+              </View>
+            ))}
+            <Text style={styles.bankLine} selectable>Reference: {booking.bookingId || `#${booking.id}`}</Text>
+            {booking.shortNoticeCancelFeeConsentedAt && booking.status === 'Cancelled' ? (
+              <Text style={styles.bankAmount}>Cancellation fee: {money((total * policy.shortNoticeFeePercent) / 100)}</Text>
+            ) : pay.stage === 'deposit_paid' ? (
+              <Text style={styles.bankAmount}>Balance: {money(pay.balanceDue)}</Text>
+            ) : pay.stage === 'unpaid' ? (
+              <Text style={styles.bankAmount}>{pay.choice === 'full' ? 'Full amount' : 'Deposit'}: {money(pay.payNowAmount)}</Text>
+            ) : null}
+          </View>
           {bothKinds ? (
             <View style={styles.kindRow}>
               {(['deposit', 'cancellation_fee'] as const).map((k) => (
@@ -265,6 +323,17 @@ export function BookingPayments({ booking, onChange }: { booking: Booking; onCha
         </View>
       ) : null}
 
+      <TouchableOpacity style={styles.invoiceDoc} onPress={() => router.push(`/invoice/${booking.id}`)} activeOpacity={0.85}>
+        <View style={styles.invoiceDocIcon}>
+          <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.invoiceDocTitle}>Invoice INV-{booking.bookingId || booking.id}</Text>
+          <Text style={styles.invoiceDocSub}>View, print or download PDF</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.invoiceLink} onPress={() => router.push('/invoices')}>
         <Ionicons name="receipt-outline" size={17} color={COLORS.primary} />
         <Text style={styles.invoiceLinkText}>View my invoices</Text>
@@ -307,6 +376,17 @@ const styles = StyleSheet.create({
 
   proof: { marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.borderLight, gap: SPACING.sm },
   proofTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  invoiceDoc: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceAlt },
+  invoiceDocIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.surface, alignItems: 'center', justifyContent: 'center' },
+  invoiceDocTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  invoiceDocSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  bankBox: { backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.md, padding: SPACING.md, gap: 2, marginTop: SPACING.sm },
+  bankTitle: { fontSize: 11, fontWeight: '700', color: COLORS.textTertiary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  bankRow: { marginBottom: 6 },
+  bankName: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  bankLine: { fontSize: 14, color: COLORS.text },
+  bankNote: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  bankAmount: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginTop: 4 },
   kindRow: { flexDirection: 'row', gap: SPACING.sm },
   kind: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
   kindOn: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + '10' },

@@ -83,6 +83,7 @@
         }
       ],
       "expo-font",
+      "expo-sharing",
       [
         "expo-splash-screen",
         {

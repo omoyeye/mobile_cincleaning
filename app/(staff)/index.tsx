@@ -11,6 +11,7 @@ import { AnimatedListItem } from '../../components/AnimatedListItem';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, EmptyState, IconAction, JobCard, NextJobCard, ScreenHeader, findMe, jobPay, localYmd } from '../../components/staff/StaffKit';
 import type { Booking, Staff } from '../../types';
+import { PHOTOS } from '../../components/media';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -164,6 +165,7 @@ export default function StaffSchedule() {
         ListEmptyComponent={
           <EmptyState
             icon="calendar-outline"
+            photo={filter === 'past' ? PHOTOS.standard : PHOTOS.trolley}
             title={filter === 'today' ? 'Nothing booked today' : filter === 'upcoming' ? 'No upcoming jobs' : 'No past jobs yet'}
             body={filter === 'past' ? 'Completed jobs will appear here.' : 'New jobs appear here as soon as the office assigns them to you.'}
           />

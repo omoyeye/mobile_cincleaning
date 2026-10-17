@@ -19,6 +19,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { authApi } from '../../services/api';
 import { getToken } from '../../services/tokenStorage';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { AuthHero } from '../../components/AuthHero';
+import { PHOTOS } from '../../components/media';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
@@ -115,16 +117,7 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.header}>
-            <Image
-              source={require('../../assets/brand-logo.png')}
-              style={styles.brandLogo}
-              resizeMode="contain"
-              accessibilityLabel="CiN Cleaning logo"
-            />
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in to your account</Text>
-          </View>
+          <AuthHero photo={PHOTOS.trolley} title="Welcome back" subtitle="Sign in to your account" />
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
@@ -251,7 +244,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: SPACING.base,
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.xxl,
   },

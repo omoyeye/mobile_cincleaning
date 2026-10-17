@@ -14,7 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { customerApi } from '../../services/api';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
-import type { Booking, CustomerInvoice } from '../../types';
+import type { Booking, CustomerInvoice, ServiceConfig } from '../../types';
+import { Image as Photo } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { FadeInUp, PhotoBackdrop, PressableScale, Shine } from '../../components/Motion';
+import { PHOTOS, servicePhoto, wrapName } from '../../components/media';
+import { addBookingToCalendar, prepChecklistFor } from '../../utils/clientPortal';
 import {
   TopBar,
   Avatar,
@@ -44,6 +49,11 @@ export default function CustomerHome() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);
+  const [services, setServices] = useState<ServiceConfig[]>([]);
+
+  useEffect(() => {
+    customerApi.getServices().then((list) => setServices(list.filter((s) => s.active !== false))).catch(() => {});
+  }, []);
 
   const firstName = (user?.name || '').split(' ')[0] || 'there';
 
@@ -78,6 +88,9 @@ export default function CustomerHome() {
   const owed = unpaid.reduce((sum, i) => sum + (Number(i.total) || 0), 0);
   // Deposit links waiting on upcoming bookings (website: "Pay deposit now").
   const depositDue = upcoming.filter((b) => b.stripePaymentLink && !b.invoicePaid);
+  // Finished cleans where only the deposit was paid: the balance is due now.
+  const balances = bookings.filter((b) => b.status === 'Completed' && b.paymentStage === 'deposit_paid' && Number(b.balanceDue) > 0);
+  const balanceTotal = balances.reduce((sum, b) => sum + (Number(b.balanceDue) || 0), 0);
 
   if (loading) {
     return (
@@ -96,7 +109,7 @@ export default function CustomerHome() {
       >
         <TopBar right={<Avatar name={user?.name} onPress={() => router.push('/(customer)/account')} />} />
 
-        <View style={styles.hello}>
+        <FadeInUp style={styles.hello}>
           <Text style={styles.greeting}>
             {getGreeting()}, {firstName}
           </Text>
@@ -105,7 +118,7 @@ export default function CustomerHome() {
               ? `You have ${upcoming.length} clean${upcoming.length > 1 ? 's' : ''} coming up`
               : 'Ready when you are. Book a clean in under two minutes.'}
           </Text>
-        </View>
+        </FadeInUp>
 
         {loadError ? (
           <TouchableOpacity style={styles.offline} onPress={onRefresh} activeOpacity={0.8}>
@@ -114,53 +127,119 @@ export default function CustomerHome() {
           </TouchableOpacity>
         ) : null}
 
-        {next ? (
-          <NextCleanCard booking={next} onPress={() => router.push(`/booking/${next.id}`)} />
-        ) : (
-          <TouchableOpacity style={styles.bookHero} activeOpacity={0.88} onPress={() => router.push('/book')} accessibilityRole="button">
-            <View style={styles.bookHeroGlow} />
-            <View style={styles.bookHeroIcon}>
-              <Ionicons name="sparkles" size={24} color={COLORS.primary} />
-            </View>
-            <Text style={styles.bookHeroTitle}>Book a clean</Text>
-            <Text style={styles.bookHeroSub}>Pick a service, date and time. You see your price before you confirm.</Text>
-            <View style={styles.bookHeroBtn}>
-              <Text style={styles.bookHeroBtnText}>Get started</Text>
-              <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
-            </View>
-          </TouchableOpacity>
-        )}
+        <FadeInUp index={1}>
+          {next ? (
+            <>
+              <NextCleanCard booking={next} onPress={() => router.push(`/booking/${next.id}`)} />
+              <View style={styles.prep}>
+                <Text style={styles.prepTitle}>Before we arrive</Text>
+                {prepChecklistFor(next.serviceType).map((tip) => (
+                  <View key={tip} style={styles.prepRow}>
+                    <Ionicons name="checkmark-circle" size={15} color={COLORS.secondary} style={{ marginTop: 2 }} />
+                    <Text style={styles.prepText}>{tip}</Text>
+                  </View>
+                ))}
+                <TouchableOpacity
+                  style={styles.prepCalendar}
+                  onPress={() => addBookingToCalendar(next).catch(() => {})}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="calendar-outline" size={16} color={COLORS.primary} />
+                  <Text style={styles.prepCalendarText}>Add to calendar</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <PressableScale style={styles.bookHeroShadow} onPress={() => router.push('/book')} accessibilityRole="button" scaleTo={0.98}>
+              <PhotoBackdrop
+                source={PHOTOS.towels}
+                style={styles.bookHero}
+                colors={['rgba(12,135,214,0.25)', 'rgba(10,106,171,0.82)', 'rgba(8,62,104,0.96)']}
+                locations={[0, 0.5, 1]}
+              >
+                <Shine />
+                <View style={styles.bookHeroIcon}>
+                  <Ionicons name="sparkles" size={24} color={COLORS.primary} />
+                </View>
+                <Text style={styles.bookHeroTitle}>Book a clean</Text>
+                <Text style={styles.bookHeroSub}>Pick a service, date and time. You see your price before you confirm.</Text>
+                <View style={styles.bookHeroBtn}>
+                  <Text style={styles.bookHeroBtnText}>Get started</Text>
+                  <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+                </View>
+              </PhotoBackdrop>
+            </PressableScale>
+          )}
+        </FadeInUp>
 
-        {unpaid.length > 0 || depositDue.length > 0 ? (
+        {unpaid.length > 0 || balances.length > 0 || depositDue.length > 0 ? (
           <TouchableOpacity
             style={styles.payBanner}
             activeOpacity={0.85}
-            onPress={() => (depositDue.length && !unpaid.length ? router.push(`/booking/${depositDue[0].id}`) : router.push('/invoices'))}
+            onPress={() =>
+              unpaid.length
+                ? router.push('/invoices')
+                : balances.length
+                  ? router.push(`/booking/${balances[0].id}`)
+                  : router.push(`/booking/${depositDue[0].id}`)
+            }
           >
             <View style={styles.payIcon}>
               <Ionicons name="card-outline" size={20} color={COLORS.error} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.payTitle}>
-                {unpaid.length ? `${money(owed)} to pay` : `Deposit due for ${depositDue.length} booking${depositDue.length > 1 ? 's' : ''}`}
+                {unpaid.length
+                  ? `${money(owed)} to pay`
+                  : balances.length
+                    ? `${money(balanceTotal)} balance to pay`
+                    : `Deposit due for ${depositDue.length} booking${depositDue.length > 1 ? 's' : ''}`}
               </Text>
               <Text style={styles.paySub}>
-                {unpaid.length ? `${unpaid.length} unpaid invoice${unpaid.length > 1 ? 's' : ''}. Tap to pay securely.` : 'Pay now to secure your cleaner.'}
+                {unpaid.length
+                  ? `${unpaid.length} unpaid invoice${unpaid.length > 1 ? 's' : ''}. Tap to pay securely.`
+                  : balances.length
+                    ? 'Your clean is done. Tap to pay the balance.'
+                    : 'Pay now to secure your cleaner.'}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={COLORS.error} />
           </TouchableOpacity>
         ) : null}
 
-        <View style={styles.quickRow}>
+        <FadeInUp index={2} style={styles.quickRow}>
           <QuickAction icon="add-circle-outline" label="Book now" onPress={() => router.push('/book')} />
           <QuickAction icon="chatbubbles-outline" label="Messages" tint="#6d52e8" onPress={() => router.push('/messages')} />
           <QuickAction icon="receipt-outline" label="Invoices" tint={COLORS.error} onPress={() => router.push('/invoices')} />
           <QuickAction icon="help-buoy-outline" label="Help" tint={COLORS.secondary} onPress={() => router.push('/help')} />
-        </View>
+        </FadeInUp>
+
+        {services.length ? (
+          <FadeInUp index={3}>
+            <SectionTitle>Explore services</SectionTitle>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.servicesRow} style={styles.servicesScroll}>
+              {services.map((svc) => (
+                <PressableScale
+                  key={svc.id}
+                  style={styles.serviceTile}
+                  onPress={() => router.push(`/book?service=${encodeURIComponent(String(svc.id))}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Book ${svc.name}`}
+                >
+                  <Photo source={servicePhoto(svc.name)} style={styles.serviceTilePhoto} contentFit="cover" transition={300} />
+                  <LinearGradient colors={['rgba(12,31,51,0)', 'rgba(12,31,51,0.82)']} locations={[0.35, 1]} style={StyleSheet.absoluteFill} />
+                  <View style={styles.serviceTileText}>
+                    <Text style={styles.serviceTileName} numberOfLines={3}>{wrapName(svc.name)}</Text>
+                    <Text style={styles.serviceTileCta}>Book now</Text>
+                  </View>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          </FadeInUp>
+        ) : null}
 
         {points > 0 && (
-          <View style={styles.loyalty}>
+          <FadeInUp index={4} style={styles.loyalty}>
             <View style={styles.loyaltyIcon}>
               <Ionicons name="diamond" size={20} color={COLORS.accentGold} />
             </View>
@@ -168,7 +247,7 @@ export default function CustomerHome() {
               <Text style={styles.loyaltyTitle}>{points} loyalty points</Text>
               <Text style={styles.loyaltySub}>Worth {money(points / 100)} off a future clean</Text>
             </View>
-          </View>
+          </FadeInUp>
         )}
 
         {later.length > 0 && (
@@ -182,8 +261,10 @@ export default function CustomerHome() {
             >
               Also coming up
             </SectionTitle>
-            {later.slice(0, 3).map((b) => (
-              <BookingCard key={b.id} booking={b} onPress={() => router.push(`/booking/${b.id}`)} />
+            {later.slice(0, 3).map((b, i) => (
+              <FadeInUp key={b.id} index={5 + i}>
+                <BookingCard booking={b} onPress={() => router.push(`/booking/${b.id}`)} />
+              </FadeInUp>
             ))}
           </>
         )}
@@ -191,8 +272,10 @@ export default function CustomerHome() {
         {recentCompleted.length > 0 && (
           <>
             <SectionTitle>Recently completed</SectionTitle>
-            {recentCompleted.map((b) => (
-              <BookingCard key={b.id} booking={b} onPress={() => router.push(`/booking/${b.id}`)} />
+            {recentCompleted.map((b, i) => (
+              <FadeInUp key={b.id} index={6 + i}>
+                <BookingCard booking={b} onPress={() => router.push(`/booking/${b.id}`)} />
+              </FadeInUp>
             ))}
           </>
         )}
@@ -225,18 +308,21 @@ const styles = StyleSheet.create({
   },
   offlineText: { flex: 1, fontSize: 14, color: COLORS.text },
 
-  bookHero: {
-    backgroundColor: COLORS.primary,
+  bookHeroShadow: {
     borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    overflow: 'hidden',
+    backgroundColor: COLORS.primary,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 16,
     elevation: 6,
   },
-  bookHeroGlow: { position: 'absolute', right: -50, top: -60, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.12)' },
+  bookHero: {
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    minHeight: 220,
+    justifyContent: 'flex-end',
+  },
   bookHeroIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
   bookHeroTitle: { fontSize: 24, fontWeight: '800', color: COLORS.white, marginTop: SPACING.md, letterSpacing: -0.3 },
   bookHeroSub: { fontSize: 15, color: 'rgba(255,255,255,0.9)', marginTop: 4, lineHeight: 21 },
@@ -253,7 +339,27 @@ const styles = StyleSheet.create({
   },
   bookHeroBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
 
+  prep: {
+    marginTop: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border + '80',
+    padding: SPACING.base,
+  },
+  prepTitle: { fontSize: 11, fontWeight: '700', color: COLORS.textTertiary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: SPACING.sm },
+  prepRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: 6 },
+  prepText: { flex: 1, fontSize: 14, color: COLORS.text, lineHeight: 20 },
+  prepCalendar: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 4, paddingVertical: 4 },
+  prepCalendarText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
   quickRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.base },
+  servicesScroll: { marginHorizontal: -SPACING.lg },
+  servicesRow: { paddingHorizontal: SPACING.lg, gap: SPACING.sm },
+  serviceTile: { width: 150, height: 180, borderRadius: RADIUS.lg, overflow: 'hidden', backgroundColor: COLORS.surfaceAlt },
+  serviceTilePhoto: { width: '100%', height: '100%' },
+  serviceTileText: { position: 'absolute', left: 12, right: 12, bottom: 12 },
+  serviceTileName: { fontSize: 15, fontWeight: '800', color: COLORS.white, lineHeight: 19 },
+  serviceTileCta: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)', marginTop: 4 },
   payBanner: {
     flexDirection: 'row',
     alignItems: 'center',

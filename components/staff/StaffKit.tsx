@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, type ViewStyle, type StyleProp } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, type ViewStyle, type StyleProp, type ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking, DayAvailability, Staff } from '../../types';
+import { PhotoBackdrop, PressableScale, Shine } from '../Motion';
+import { servicePhoto } from '../media';
 
 /* ───────────── Shared rules (same as the website and the server) ───────────── */
 
@@ -147,10 +149,28 @@ export function StatusBadge({ status }: { status?: string | null }) {
   );
 }
 
-export function EmptyState({ icon, title, body }: { icon: keyof typeof Ionicons.glyphMap; title: string; body?: string }) {
+export function EmptyState({
+  icon,
+  title,
+  body,
+  photo,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  body?: string;
+  photo?: ImageSourcePropType;
+}) {
   return (
-    <View style={kit.empty}>
-      <View style={kit.emptyIcon}>
+    <View style={[kit.empty, photo ? kit.emptyWithPhoto : null]}>
+      {photo ? (
+        <PhotoBackdrop
+          source={photo}
+          style={kit.emptyPhoto}
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.35)', COLORS.surface]}
+          locations={[0, 0.6, 1]}
+        />
+      ) : null}
+      <View style={[kit.emptyIcon, photo ? kit.emptyIconOnPhoto : null]}>
         <Ionicons name={icon} size={26} color={COLORS.textTertiary} />
       </View>
       <Text style={kit.emptyTitle}>{title}</Text>
@@ -204,7 +224,7 @@ export function JobCard({
   const hours = bookedHours(booking);
   const completed = booking.status === 'Completed';
   return (
-    <TouchableOpacity style={kit.job} activeOpacity={0.75} onPress={onPress}>
+    <PressableScale style={kit.job} onPress={onPress} accessibilityRole="button">
       <View style={[kit.jobTime, completed && kit.jobTimeDone]}>
         <Text style={[kit.jobTimeStart, completed && { color: COLORS.status.completed }]}>{booking.time || '--:--'}</Text>
         <Text style={kit.jobTimeEnd}>to {endTime(booking.time, hours)}</Text>
@@ -232,7 +252,7 @@ export function JobCard({
           {actions ? <View style={kit.jobActions}>{actions}</View> : null}
         </View>
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
@@ -246,8 +266,14 @@ export function IconAction({ icon, onPress, label }: { icon: keyof typeof Ionico
 
 export function NextJobCard({ booking, onPress }: { booking: Booking; onPress: () => void }) {
   return (
-    <TouchableOpacity style={kit.next} activeOpacity={0.85} onPress={onPress}>
-      <View style={kit.nextGlow} />
+    <PressableScale style={kit.nextShadow} onPress={onPress} accessibilityRole="button" scaleTo={0.98}>
+     <PhotoBackdrop
+      source={servicePhoto(booking.serviceType)}
+      style={kit.next}
+      colors={['rgba(12,135,214,0.35)', 'rgba(10,106,171,0.86)', 'rgba(8,62,104,0.96)']}
+      locations={[0, 0.5, 1]}
+     >
+      <Shine />
       <Text style={kit.nextEyebrow}>Next job · {friendlyDay(String(booking.date).slice(0, 10))}</Text>
       <Text style={kit.nextTime}>{booking.time || '--:--'}</Text>
       <Text style={kit.nextName} numberOfLines={1}>
@@ -263,7 +289,8 @@ export function NextJobCard({ booking, onPress }: { booking: Booking; onPress: (
         <Text style={kit.nextOpenText}>Open job</Text>
         <Ionicons name="chevron-forward" size={14} color={COLORS.white} />
       </View>
-    </TouchableOpacity>
+     </PhotoBackdrop>
+    </PressableScale>
   );
 }
 
@@ -302,7 +329,10 @@ export const kit = StyleSheet.create({
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface + 'aa',
   },
+  emptyWithPhoto: { paddingTop: 0, overflow: 'hidden', borderStyle: 'solid', borderColor: COLORS.border + '80', backgroundColor: COLORS.surface },
+  emptyPhoto: { alignSelf: 'stretch', height: 120, marginHorizontal: -SPACING.lg },
   emptyIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: COLORS.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.md },
+  emptyIconOnPhoto: { marginTop: -26, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text },
   emptyBody: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginTop: 4, maxWidth: 280 },
 
@@ -348,16 +378,22 @@ export const kit = StyleSheet.create({
   jobActions: { flexDirection: 'row', gap: 6, marginLeft: 'auto' },
   iconAction: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.primary + '12', alignItems: 'center', justifyContent: 'center' },
 
-  next: {
-    backgroundColor: COLORS.primary,
+  nextShadow: {
     borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    overflow: 'hidden',
+    backgroundColor: COLORS.primary,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 14,
     elevation: 5,
+  },
+  next: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    paddingTop: SPACING.xl,
+    minHeight: 170,
+    justifyContent: 'flex-end',
   },
   nextGlow: { position: 'absolute', right: -40, top: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(255,255,255,0.12)' },
   nextEyebrow: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.9)' },
