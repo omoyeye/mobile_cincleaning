@@ -14,6 +14,7 @@ import {
   Modal,
   FlatList,
   TextInput,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -106,6 +107,7 @@ export default function BookingDetailScreen() {
   const [showRating, setShowRating] = useState(false);
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState('');
+  const [reviewPublic, setReviewPublic] = useState(false);
   const [submittingRating, setSubmittingRating] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState('');
@@ -212,10 +214,18 @@ export default function BookingDetailScreen() {
     if (!booking || rating === 0) return;
     setSubmittingRating(true);
     try {
-      await bookingsApi.rate(booking.id, rating, feedback.trim() || undefined);
+      await bookingsApi.rate(booking.id, rating, feedback.trim() || undefined, reviewPublic);
       setBooking((prev) => prev ? { ...prev, rating, feedback: feedback.trim() || null } : prev);
       setShowRating(false);
-      Alert.alert('Thank you!', 'Your review has been submitted.');
+      if (rating >= 4 && policy.googleReviewUrl) {
+        // Happy customers are invited to post on Google too: those reviews show stars in Google Search and Maps.
+        Alert.alert('Thank you!', 'Glad you are happy with your clean. Would you share it on Google too? It really helps local customers find us.', [
+          { text: 'Maybe later', style: 'cancel' },
+          { text: 'Review on Google', onPress: () => void Linking.openURL(policy.googleReviewUrl) },
+        ]);
+      } else {
+        Alert.alert('Thank you!', 'Your review has been submitted.');
+      }
     } catch {
       Alert.alert('Error', 'Could not submit review.');
     }
@@ -536,6 +546,17 @@ export default function BookingDetailScreen() {
               multiline
               numberOfLines={3}
             />
+            <View style={styles.consentRow}>
+              <Switch
+                value={reviewPublic}
+                onValueChange={setReviewPublic}
+                trackColor={{ true: COLORS.accentGold, false: COLORS.border }}
+                accessibilityLabel="Show my review on the website"
+              />
+              <Text style={styles.consentText}>
+                Show my rating and comment on the CiN website with my first name, surname initial and town. I can ask for it to be removed at any time.
+              </Text>
+            </View>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnPrimary, rating === 0 && styles.actionBtnDisabled]}
               onPress={handleSubmitRating}
@@ -998,6 +1019,18 @@ const styles = StyleSheet.create({
 
   starsRow: { flexDirection: 'row', gap: 4, marginVertical: SPACING.sm },
 
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.textSecondary,
+  },
   feedbackInput: {
     backgroundColor: COLORS.surfaceAlt,
     borderWidth: 1,

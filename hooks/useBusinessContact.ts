@@ -26,6 +26,8 @@ export type BusinessContact = {
   cancellationMessage: string;
   /** Accounts for paying the deposit or a cancellation fee by bank transfer (admin: Settings > bank details). */
   bankDetails: BankAccount[];
+  /** Google Business Profile review link, offered after a 4 or 5 star rating (admin: Settings > Social links). */
+  googleReviewUrl: string;
 };
 
 /** wa.me needs digits only in international format. */
@@ -66,6 +68,7 @@ const DEFAULTS: BusinessContact = {
   cancellationMessage:
     'If you choose to cancel within 24 hours of your appointment, you agree to a short-notice cancellation fee of 10% of the booking total.',
   bankDetails: FALLBACK_BANK,
+  googleReviewUrl: '',
 };
 
 function parseBanks(raw: unknown): BankAccount[] {
@@ -104,6 +107,7 @@ function normalize(s: Record<string, unknown>): BusinessContact {
     cancellationMessage:
       typeof cancel.consentMessage === 'string' && cancel.consentMessage.trim() ? cancel.consentMessage.trim() : DEFAULTS.cancellationMessage,
     bankDetails: parseBanks(s?.bankDetails),
+    googleReviewUrl: /^https?:\/\//i.test(String(s?.googleReviewUrl || '').trim()) ? String(s?.googleReviewUrl).trim() : '',
   };
 }
 

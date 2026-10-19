@@ -172,10 +172,11 @@ export const bookingsApi = {
       }),
     }),
 
-  rate: (id: number, rating: number, feedback?: string) =>
+  /** reviewPublic: the customer agreed to show the review on the website. */
+  rate: (id: number, rating: number, feedback?: string, reviewPublic = false) =>
     request(`/api/bookings/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ rating, feedback }),
+      body: JSON.stringify({ rating, feedback, reviewPublic: reviewPublic && !!feedback }),
     }),
 
   getTracking: (id: number) => request<BookingTracking>(`/api/bookings/${id}/tracking`),
