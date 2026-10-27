@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,6 +12,8 @@ import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, EmptyState, IconAction, JobCard, NextJobCard, ScreenHeader, findMe, jobPay, localYmd } from '../../components/staff/StaffKit';
 import type { Booking, Staff } from '../../types';
 import { PHOTOS } from '../../components/media';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -30,7 +32,7 @@ export default function StaffSchedule() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [me, setMe] = useState<Staff | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchBookings());
   const [filter, setFilter] = useState<DayFilter>('today');
 
   const firstName = (user?.name || '').split(' ')[0] || 'there';
@@ -51,11 +53,6 @@ export default function StaffSchedule() {
     fetchBookings();
   }, [fetchBookings]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchBookings();
-    setRefreshing(false);
-  };
 
   const filtered = bookings.filter((b) => {
     if (b.status === 'Cancelled') return false;
@@ -160,7 +157,7 @@ export default function StaffSchedule() {
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
         ListHeaderComponent={header}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <EmptyState

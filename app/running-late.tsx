@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+  } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -19,6 +18,8 @@ import { useToast } from '../components/Toast';
 import { APP_NAME, COLORS, RADIUS, SPACING } from '../constants/config';
 import type { Booking, LateNotice } from '../types';
 import { addMinutesToHHMM, formatClock, isTodayYmd, isValidHHMM } from '../utils/tracking';
+import { BrandRefresh } from '../components/BrandRefresh';
+import { usePullRefresh } from '../hooks/usePullRefresh';
 
 const REASONS = [
   'Heavy traffic',
@@ -40,7 +41,7 @@ export default function RunningLateScreen() {
 
   const [jobs, setJobs] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => load());
   const [jobId, setJobId] = useState<number | null>(bookingId ? Number(bookingId) : null);
   const [reasonChip, setReasonChip] = useState('');
   const [reasonText, setReasonText] = useState('');
@@ -124,14 +125,9 @@ export default function RunningLateScreen() {
     setSending(false);
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
@@ -148,7 +144,7 @@ export default function RunningLateScreen() {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+          refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         >
           <Text style={styles.intro}>
             Let the client and the office know why you are delayed and when you expect to arrive.

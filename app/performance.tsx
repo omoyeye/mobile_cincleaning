@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -9,6 +9,8 @@ import { Card, EmptyState } from '../components/staff/StaffKit';
 import { FilterPills, money } from '../components/ClientKit';
 import { goBack } from '../utils/navigation';
 import type { StaffPerformance } from '../types';
+import { BrandRefresh } from '../components/BrandRefresh';
+import { usePullRefresh } from '../hooks/usePullRefresh';
 
 type Section = 'overview' | 'reviews' | 'assessments' | 'jobs';
 
@@ -74,7 +76,7 @@ export default function PerformanceScreen() {
   const router = useRouter();
   const [data, setData] = useState<StaffPerformance | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => load());
   const [error, setError] = useState<string | null>(null);
   const [section, setSection] = useState<Section>('overview');
 
@@ -102,7 +104,7 @@ export default function PerformanceScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {header}
         <View style={styles.center}>
           <ActivityIndicator size="large" color={COLORS.primary} />
@@ -113,7 +115,7 @@ export default function PerformanceScreen() {
 
   if (!data) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {header}
         <View style={{ padding: SPACING.lg }}>
           <EmptyState icon="trending-up-outline" title="Performance unavailable" body={error || 'Please try again in a moment.'} />
@@ -132,20 +134,15 @@ export default function PerformanceScreen() {
   const maxEarned = Math.max(1, ...data.months.map((m) => m.earned));
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {header}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
+          <BrandRefresh
             refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await load();
-              setRefreshing(false);
-            }}
-            tintColor={COLORS.primary}
+            onRefresh={onRefresh}
           />
         }
       >

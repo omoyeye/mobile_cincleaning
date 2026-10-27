@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,8 @@ import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, Card, EmptyState, ScreenHeader, SectionTitle, StatusBadge, findMe, jobPay, localWeekRange } from '../../components/staff/StaffKit';
 import type { Booking, Staff, StaffInvoice } from '../../types';
 import { formatHoursMinutes } from '../../utils/duration';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 type WeekJob = { id: number; date: string; customer: string; staffCount: number; bookedHours: number; yourHours: number; hourlyRate: number; yourShare: number };
 type WeekInvoice = { weekStart: string; weekEnd: string; jobs: WeekJob[]; totalShare: number };
@@ -49,7 +51,7 @@ export default function EarningsScreen() {
   const [week, setWeek] = useState<WeekInvoice | null>(null);
   const [invoices, setInvoices] = useState<StaffInvoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchData());
   const [submittingInvoice, setSubmittingInvoice] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -76,11 +78,6 @@ export default function EarningsScreen() {
     fetchData();
   }, [fetchData]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchData();
-    setRefreshing(false);
-  };
 
   // Pay is always the cleaner's share: booked hours ÷ people on the job × hourly rate (never the client's price).
   const rate = Number(staff?.hourlyRate) || 0;
@@ -158,7 +155,7 @@ export default function EarningsScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
         <BrandBar />

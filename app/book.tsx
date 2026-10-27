@@ -12,7 +12,7 @@ import {
   Animated,
   KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { goBack } from '../utils/navigation';
@@ -114,6 +114,8 @@ interface BreakdownLine {
 export default function BookScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  // Keeps the price bar clear of the phone's gesture bar or 3-button nav.
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const progress = useRef(new Animated.Value(0)).current;
   const drawerAnim = useRef(new Animated.Value(0)).current;
@@ -715,7 +717,7 @@ export default function BookScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: 160 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -1620,7 +1622,7 @@ export default function BookScreen() {
           </View>
         )}
 
-        <View style={styles.bottomBar}>
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, SPACING.md) }]}>
           {step === 'summary' ? (
             <TouchableOpacity
               style={[styles.primaryBtn, (submitting || !termsAccepted) && styles.primaryBtnDisabled]}
@@ -2005,7 +2007,6 @@ const styles = StyleSheet.create({
 
   bottomBar: {
     paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm,
-    paddingBottom: Platform.OS === 'ios' ? 34 : SPACING.md,
   },
   primaryBtn: {
     backgroundColor: COLORS.primary, borderRadius: RADIUS.md,

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
   ActivityIndicator,
   Share,
   Alert,
@@ -19,6 +18,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { customerApi, staffApi } from '../services/api';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
 import type { Referral } from '../types';
+import { BrandRefresh } from '../components/BrandRefresh';
+import { usePullRefresh } from '../hooks/usePullRefresh';
 
 function getStatusColor(status: string) {
   switch (status) {
@@ -33,7 +34,7 @@ export default function ReferralsScreen() {
   const router = useRouter();
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchReferrals());
 
   const isStaff = user?.role === 'staff';
 
@@ -50,11 +51,6 @@ export default function ReferralsScreen() {
 
   useEffect(() => { fetchReferrals(); }, [fetchReferrals]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchReferrals();
-    setRefreshing(false);
-  };
 
   const handleShare = async () => {
     if (!user?.referralCode) {
@@ -81,7 +77,7 @@ export default function ReferralsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
@@ -94,7 +90,7 @@ export default function ReferralsScreen() {
         data={referrals}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>

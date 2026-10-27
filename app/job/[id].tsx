@@ -28,6 +28,8 @@ import { formatClock, isTodayYmd } from '../../utils/tracking';
 import { photoToDataUrl } from '../../utils/photos';
 import { startLiveTracking, stopLiveTracking, isTrackingJob } from '../../services/liveTracking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 type Phase = 'pre' | 'clocked_in' | 'completing' | 'done';
 type JobPhoto = { uri: string; width?: number; height?: number };
@@ -161,6 +163,7 @@ export default function JobScreen() {
   }, [bookingId]);
 
   useEffect(() => { fetchBooking(); }, [fetchBooking]);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchBooking());
 
   // Keep the job's progress on the phone while the cleaner is working.
   useEffect(() => {
@@ -374,7 +377,7 @@ export default function JobScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
@@ -384,7 +387,11 @@ export default function JobScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {/* Who, status and where the cleaner is in the job */}
         <View style={styles.jobHead}>
           <View style={styles.jobHeadRow}>

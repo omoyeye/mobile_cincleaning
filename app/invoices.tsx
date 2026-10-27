@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Linking } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -9,6 +9,8 @@ import { COLORS, SPACING, RADIUS, SITE_URL } from '../constants/config';
 import { EmptyState, FilterPills, money } from '../components/ClientKit';
 import { goBack } from '../utils/navigation';
 import type { CustomerInvoice } from '../types';
+import { BrandRefresh } from '../components/BrandRefresh';
+import { usePullRefresh } from '../hooks/usePullRefresh';
 
 type Filter = 'unpaid' | 'paid' | 'all';
 
@@ -30,7 +32,7 @@ export default function InvoicesScreen() {
   const router = useRouter();
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => load());
   const [failed, setFailed] = useState(false);
   const [filter, setFilter] = useState<Filter>('unpaid');
 
@@ -62,7 +64,7 @@ export default function InvoicesScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
@@ -79,14 +81,9 @@ export default function InvoicesScreen() {
           keyExtractor={(i) => String(i.id)}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl
+            <BrandRefresh
               refreshing={refreshing}
-              onRefresh={async () => {
-                setRefreshing(true);
-                await load();
-                setRefreshing(false);
-              }}
-              tintColor={COLORS.primary}
+              onRefresh={onRefresh}
             />
           }
           ListHeaderComponent={

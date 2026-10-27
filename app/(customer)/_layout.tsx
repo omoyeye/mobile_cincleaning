@@ -2,12 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/config';
-import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { customerApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function CustomerLayout() {
   const { user, loading } = useAuth();
+  // The phone's own bottom area (gesture bar or 3-button nav) varies by model, so size the tab bar from it.
+  const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 8);
   const [unread, setUnread] = useState(0);
 
   const fetchUnread = useCallback(async () => {
@@ -23,8 +26,8 @@ export default function CustomerLayout() {
     const interval = setInterval(fetchUnread, 30000);
     return () => clearInterval(interval);
   }, [fetchUnread]);
-  // Signed out (or the session expired): back to the login screen.
-  if (!loading && !user) return <Redirect href="/login" />;
+  // Signed out (or the session expired): back to the shared welcome page.
+  if (!loading && !user) return <Redirect href="/welcome" />;
 
   return (
     <Tabs
@@ -36,9 +39,9 @@ export default function CustomerLayout() {
           backgroundColor: COLORS.white,
           borderTopWidth: 1,
           borderTopColor: COLORS.borderLight,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+          paddingBottom: bottomPad,
           paddingTop: 8,
-          height: Platform.OS === 'ios' ? 88 : 64,
+          height: 56 + bottomPad,
           elevation: 0,
           shadowOpacity: 0,
         },

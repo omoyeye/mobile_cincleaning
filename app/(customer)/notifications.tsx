@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
   Image,
   Animated,
 } from 'react-native';
@@ -20,6 +19,8 @@ import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking, Notification } from '../../types';
 import { ScreenHeader } from '../../components/ClientKit';
 import { alertTarget } from '../../utils/alerts';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -75,7 +76,7 @@ export default function NotificationsScreen() {
     customerApi.getBookings().then(setBookings).catch(() => {});
   }, []);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchAlerts());
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -89,11 +90,6 @@ export default function NotificationsScreen() {
 
   useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchAlerts();
-    setRefreshing(false);
-  };
 
   const markRead = async (id: number) => {
     setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, isRead: true } : a)));
@@ -164,7 +160,7 @@ export default function NotificationsScreen() {
         data={alerts}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.empty}>

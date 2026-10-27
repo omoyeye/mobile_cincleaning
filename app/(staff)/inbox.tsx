@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
   ActivityIndicator,
   Image,
   TextInput,
@@ -21,6 +20,8 @@ import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, ScreenHeader } from '../../components/staff/StaffKit';
 import type { Booking, Notification, DirectMessage } from '../../types';
 import { alertTarget } from '../../utils/alerts';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 type InboxTab = 'alerts' | 'admin';
 
@@ -75,7 +76,13 @@ export default function InboxScreen() {
     staffApi.getBookings().then(setJobs).catch(() => {});
   }, []);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(async () => {
+    if (tab === 'alerts') {
+      await fetchNotifications();
+    } else {
+      await fetchAdminMessages();
+    }
+  });
 
   const [adminMessages, setAdminMessages] = useState<DirectMessage[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -118,15 +125,6 @@ export default function InboxScreen() {
     };
   }, [tab, fetchAdminMessages]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    if (tab === 'alerts') {
-      await fetchNotifications();
-    } else {
-      await fetchAdminMessages();
-    }
-    setRefreshing(false);
-  };
 
   const markRead = async (id: number) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
@@ -205,7 +203,7 @@ export default function InboxScreen() {
           data={notifications}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+          refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -269,7 +267,7 @@ export default function InboxScreen() {
               contentContainerStyle={styles.chatList}
               showsVerticalScrollIndicator={false}
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+              refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
               ListEmptyComponent={
                 <View style={styles.empty}>
                   <Ionicons name="chatbubbles-outline" size={48} color={COLORS.textTertiary} />

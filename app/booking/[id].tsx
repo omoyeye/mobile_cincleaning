@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
   ActivityIndicator,
   Alert,
   Linking,
@@ -35,6 +34,8 @@ import { AssignedCleaners, BookingPayments } from '../../components/BookingPayme
 import { useBusinessContact } from '../../hooks/useBusinessContact';
 import { addBookingToCalendar, prepChecklistFor } from '../../utils/clientPortal';
 import { formatHoursMinutes } from '../../utils/duration';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 /** Where the booking is on its journey, for the step tracker at the top. */
 function journeyStep(b: Booking, enRouteAt: string | null, arrived: boolean): number {
@@ -103,7 +104,10 @@ export default function BookingDetailScreen() {
   const router = useRouter();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(async () => {
+    await fetchBooking();
+    if (trackLive) await loadTracking();
+  });
   const [cancelling, setCancelling] = useState(false);
   const [showRating, setShowRating] = useState(false);
   const [rating, setRating] = useState(0);
@@ -171,12 +175,6 @@ export default function BookingDetailScreen() {
     mapsApi.geocode(addr).then(setJobCoords).catch(() => {});
   }, [trackLive, booking?.id]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchBooking();
-    if (trackLive) await loadTracking();
-    setRefreshing(false);
-  };
 
   const handleCancel = () => {
     if (!booking) return;
@@ -313,7 +311,7 @@ export default function BookingDetailScreen() {
     : '';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} accessibilityLabel="Back">
@@ -328,7 +326,7 @@ export default function BookingDetailScreen() {
 
       <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
         {/* Summary */}

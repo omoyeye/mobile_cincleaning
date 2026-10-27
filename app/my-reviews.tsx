@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +15,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { staffApi } from '../services/api';
 import { ListSkeleton } from '../components/SkeletonLoader';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { BrandRefresh } from '../components/BrandRefresh';
+import { usePullRefresh } from '../hooks/usePullRefresh';
 
 interface Review {
   id: number;
@@ -31,7 +32,7 @@ export default function MyReviewsScreen() {
   const { user } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchReviews());
   const [avgRating, setAvgRating] = useState(0);
 
   const fetchReviews = useCallback(async () => {
@@ -49,11 +50,6 @@ export default function MyReviewsScreen() {
 
   useEffect(() => { fetchReviews(); }, [fetchReviews]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchReviews();
-    setRefreshing(false);
-  };
 
   const renderStars = (rating: number) => {
     const stars = [];
@@ -71,7 +67,7 @@ export default function MyReviewsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
@@ -86,7 +82,7 @@ export default function MyReviewsScreen() {
         <ScrollView
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+          refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         >
           {/* Summary card */}
           <View style={styles.summaryCard}>

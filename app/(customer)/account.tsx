@@ -15,9 +15,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { authApi } from '../../services/api';
 import { COLORS, SPACING, RADIUS, APP_VERSION } from '../../constants/config';
 import { TopBar, Avatar, RowGroup, ListRow } from '../../components/ClientKit';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 export default function AccountScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  // Pulls the latest name, email and photo (for example after the office updates them).
+  const { refreshing, onRefresh } = usePullRefresh(() => refreshUser());
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const firstName = (user?.name || '').split(' ')[0] || 'User';
@@ -103,7 +107,11 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <TopBar />
 
         <View style={styles.profileCard}>

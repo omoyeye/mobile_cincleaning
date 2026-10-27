@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  RefreshControl,
   Alert,
   Image,
   Modal,
@@ -21,6 +20,8 @@ import { ListSkeleton } from '../../components/SkeletonLoader';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, ScreenHeader, availabilityToList, findMe, listToWeeklyAvailability } from '../../components/staff/StaffKit';
 import type { Staff, DayAvailability } from '../../types';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
@@ -127,7 +128,7 @@ export default function RotaScreen() {
   const [availability, setAvailability] = useState<DayAvailability[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchProfile());
   const [timePicker, setTimePicker] = useState<{ day: string; field: 'start' | 'end'; value: string } | null>(null);
 
   const fetchProfile = useCallback(async () => {
@@ -147,11 +148,6 @@ export default function RotaScreen() {
 
   useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchProfile();
-    setRefreshing(false);
-  };
 
   const toggleDay = (day: string) => {
     setAvailability((prev) =>
@@ -212,7 +208,7 @@ export default function RotaScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
         <BrandBar />

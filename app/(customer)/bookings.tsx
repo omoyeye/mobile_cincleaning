@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,8 @@ import { AnimatedListItem } from '../../components/AnimatedListItem';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking } from '../../types';
 import { ScreenHeader, BookingCard, FilterPills, EmptyState, isUpcoming } from '../../components/ClientKit';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 type Filter = 'upcoming' | 'past' | 'cancelled' | 'all';
 
@@ -22,7 +24,7 @@ export default function BookingsScreen() {
   const haptic = useHaptic();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchBookings());
   const [filter, setFilter] = useState<Filter>('upcoming');
 
   const fetchBookings = useCallback(async () => {
@@ -36,11 +38,6 @@ export default function BookingsScreen() {
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchBookings();
-    setRefreshing(false);
-  };
 
   const groups = useMemo(() => {
     const upcoming = bookings.filter(isUpcoming).sort((a, b) => stamp(a).localeCompare(stamp(b)));
@@ -104,7 +101,7 @@ export default function BookingsScreen() {
         data={list}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={<EmptyState icon="calendar-outline" title={empty[filter].title} body={empty[filter].body} />}
         renderItem={({ item, index }) => (

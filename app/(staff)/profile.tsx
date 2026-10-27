@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  RefreshControl,
   Image,
 } from 'react-native';
 
@@ -19,6 +18,8 @@ import { staffApi, authApi } from '../../services/api';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar } from '../../components/staff/StaffKit';
 import type { Staff, Referral } from '../../types';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 interface MenuItem {
   icon: keyof typeof Ionicons.glyphMap;
@@ -34,7 +35,7 @@ export default function StaffProfileScreen() {
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchData());
 
   const firstName = (user?.name || '').split(' ')[0] || 'Staff';
 
@@ -53,11 +54,6 @@ export default function StaffProfileScreen() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchData();
-    setRefreshing(false);
-  };
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -165,7 +161,7 @@ export default function StaffProfileScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
         <BrandBar />

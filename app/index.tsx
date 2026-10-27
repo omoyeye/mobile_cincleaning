@@ -68,7 +68,7 @@ export default function HomePage() {
   if (user?.role === 'customer' || user?.role === 'admin') return <Redirect href="/(customer)" />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Logo */}
         <View style={styles.logoWrap}>
@@ -165,7 +165,7 @@ export default function HomePage() {
         <TouchableOpacity
           style={styles.staffSection}
           activeOpacity={0.7}
-          onPress={() => router.push('/(auth)/login')}
+          onPress={() => router.push('/(auth)/login?as=staff')}
         >
           <View style={styles.staffIconWrap}>
             <Ionicons name="briefcase-outline" size={20} color={COLORS.white} />

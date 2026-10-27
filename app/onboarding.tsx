@@ -61,7 +61,8 @@ export default function OnboardingScreen() {
 
   const finishOnboarding = async () => {
     await AsyncStorage.setItem('onboarding_complete', 'true');
-    router.replace('/(auth)/login');
+    // Everyone (clients and staff) lands on the shared welcome page first.
+    router.replace('/welcome');
   };
 
   const goNext = () => {

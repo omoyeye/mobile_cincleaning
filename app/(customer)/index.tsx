@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -31,6 +30,8 @@ import {
   isUpcoming,
   money,
 } from '../../components/ClientKit';
+import { BrandRefresh } from '../../components/BrandRefresh';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -46,7 +47,7 @@ export default function CustomerHome() {
   const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchBookings());
   const [loadError, setLoadError] = useState(false);
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);
   const [services, setServices] = useState<ServiceConfig[]>([]);
@@ -71,11 +72,6 @@ export default function CustomerHome() {
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchBookings();
-    setRefreshing(false);
-  };
 
   const upcoming = bookings.filter(isUpcoming).sort(byDateAsc);
   const [next, ...later] = upcoming;
@@ -104,7 +100,7 @@ export default function CustomerHome() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+        refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
         <TopBar right={<Avatar name={user?.name} onPress={() => router.push('/(customer)/account')} />} />

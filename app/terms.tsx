@@ -158,7 +158,7 @@ export default function TermsScreen() {
   const currentSections = tabConfig.find((t) => t.key === tab)?.sections ?? [];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => goBack(router)}

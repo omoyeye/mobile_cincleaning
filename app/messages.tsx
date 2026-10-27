@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -10,6 +10,8 @@ import { COLORS, SPACING, RADIUS } from '../constants/config';
 import { EmptyState, friendlyDay, serviceLabel, bookingYmd } from '../components/ClientKit';
 import { goBack } from '../utils/navigation';
 import type { Booking } from '../types';
+import { BrandRefresh } from '../components/BrandRefresh';
+import { usePullRefresh } from '../hooks/usePullRefresh';
 
 /** Chat unlocks 10 minutes before the start (the server checks the same rule). */
 const OPENS_BEFORE_MS = 10 * 60 * 1000;
@@ -41,7 +43,7 @@ export default function MessagesScreen() {
   const isStaff = user?.role === 'staff';
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh(() => load());
 
   const load = useCallback(async () => {
     try {
@@ -70,7 +72,7 @@ export default function MessagesScreen() {
   }, [bookings, isStaff]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
@@ -87,14 +89,9 @@ export default function MessagesScreen() {
           keyExtractor={(b) => String(b.id)}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl
+            <BrandRefresh
               refreshing={refreshing}
-              onRefresh={async () => {
-                setRefreshing(true);
-                await load();
-                setRefreshing(false);
-              }}
-              tintColor={COLORS.primary}
+              onRefresh={onRefresh}
             />
           }
           ListHeaderComponent={
