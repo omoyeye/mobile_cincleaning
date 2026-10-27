@@ -12,6 +12,7 @@ import { goBack } from '../../utils/navigation';
 import { buildInvoice, formatHours, invoiceHtml } from '../../utils/invoice';
 import { COLORS, SPACING, RADIUS, SITE_URL } from '../../constants/config';
 import type { Booking, Extra, ServiceConfig } from '../../types';
+import { formatHoursMinutes } from '../../utils/duration';
 
 /** The booking invoice, laid out like the website's "Invoice & receipt" page, with Print and Download PDF. */
 export default function InvoiceScreen() {
@@ -192,25 +193,25 @@ export default function InvoiceScreen() {
               {inv.breakdown.lines.length === 0 ? (
                 <View style={styles.timeRow}>
                   <Text style={styles.timeText}>{inv.breakdown.model === 'itemized' ? inv.breakdown.baseLabel : 'Booked clean duration'}</Text>
-                  <Text style={styles.timeTotal}>{formatHours(inv.breakdown.totalHours)}h</Text>
+                  <Text style={styles.timeTotal}>{formatHoursMinutes(inv.breakdown.totalHours)}</Text>
                 </View>
               ) : (
                 <>
                   <View style={styles.timeRow}>
                     <Text style={styles.timeText}>{inv.breakdown.baseLabel}</Text>
-                    <Text style={styles.timeHours}>{formatHours(inv.breakdown.baseHours)}h</Text>
+                    <Text style={styles.timeHours}>{formatHoursMinutes(inv.breakdown.baseHours)}</Text>
                   </View>
                   {inv.breakdown.lines.map((l, i) => (
                     <View key={`${l.extraId}-${i}`} style={styles.timeRow}>
                       <Text style={styles.timeText}>
                         {l.label} <Text style={styles.mutedSmall}>×{l.quantity}</Text>
                       </Text>
-                      <Text style={styles.timeHours}>{formatHours(l.lineHours)}h</Text>
+                      <Text style={styles.timeHours}>{formatHoursMinutes(l.lineHours)}</Text>
                     </View>
                   ))}
                   <View style={[styles.timeRow, styles.timeRowTotal]}>
                     <Text style={styles.timeTotalLabel}>TOTAL BOOKED</Text>
-                    <Text style={styles.timeTotal}>{formatHours(inv.breakdown.totalHours)}h</Text>
+                    <Text style={styles.timeTotal}>{formatHoursMinutes(inv.breakdown.totalHours)}</Text>
                   </View>
                 </>
               )}

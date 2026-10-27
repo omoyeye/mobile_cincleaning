@@ -34,6 +34,7 @@ import { servicePhoto } from '../../components/media';
 import { AssignedCleaners, BookingPayments } from '../../components/BookingPayments';
 import { useBusinessContact } from '../../hooks/useBusinessContact';
 import { addBookingToCalendar, prepChecklistFor } from '../../utils/clientPortal';
+import { formatHoursMinutes } from '../../utils/duration';
 
 /** Where the booking is on its journey, for the step tracker at the top. */
 function journeyStep(b: Booking, enRouteAt: string | null, arrived: boolean): number {
@@ -346,7 +347,7 @@ export default function BookingDetailScreen() {
           </Text>
           <Text style={styles.heroSub}>
             {longDate}
-            {hours ? ` · ${hours} hour${hours === 1 ? '' : 's'}` : ''}
+            {hours ? ` · ${formatHoursMinutes(Number(hours))}` : ''}
             {booking.frequency && booking.frequency !== 'One-time' ? ` · ${booking.frequency}` : ''}
           </Text>
 

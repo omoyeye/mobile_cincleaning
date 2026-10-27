@@ -10,6 +10,7 @@ import { ListSkeleton, StatsSkeleton } from '../../components/SkeletonLoader';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, Card, EmptyState, ScreenHeader, SectionTitle, StatusBadge, findMe, jobPay, localWeekRange } from '../../components/staff/StaffKit';
 import type { Booking, Staff, StaffInvoice } from '../../types';
+import { formatHoursMinutes } from '../../utils/duration';
 
 type WeekJob = { id: number; date: string; customer: string; staffCount: number; bookedHours: number; yourHours: number; hourlyRate: number; yourShare: number };
 type WeekInvoice = { weekStart: string; weekEnd: string; jobs: WeekJob[]; totalShare: number };
@@ -224,7 +225,7 @@ export default function EarningsScreen() {
                     {j.customer || 'Client'}
                   </Text>
                   <Text style={styles.rowMeta}>
-                    {shortDate(j.date)} · {Number(j.yourHours).toFixed(2)}h × {'£'}
+                    {shortDate(j.date)} · {formatHoursMinutes(Number(j.yourHours))} × {'£'}
                     {Number(j.hourlyRate).toFixed(2)}
                     {j.staffCount > 1 ? ` · team of ${j.staffCount}` : ''}
                   </Text>
@@ -249,7 +250,7 @@ export default function EarningsScreen() {
                       {b.contact?.name || String(b.serviceType).replace(/_/g, ' ')}
                     </Text>
                     <Text style={styles.rowMeta}>
-                      {shortDate(b.date)} · {hours.toFixed(2)}h
+                      {shortDate(b.date)} · {formatHoursMinutes(hours)}
                     </Text>
                   </View>
                   <Text style={styles.rowAmount}>{'£'}{pay.toFixed(2)}</Text>
@@ -268,7 +269,7 @@ export default function EarningsScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle}>{inv.weekLabel}</Text>
                     <Text style={styles.rowMeta}>
-                      {inv.weekJobCount || 0} jobs{inv.weekTotalHours ? ` · ${Number(inv.weekTotalHours).toFixed(2)}h` : ''}
+                      {inv.weekJobCount || 0} jobs{inv.weekTotalHours ? ` · ${formatHoursMinutes(Number(inv.weekTotalHours))}` : ''}
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>

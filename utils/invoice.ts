@@ -1,5 +1,6 @@
 import type { Booking, Extra, ServiceConfig } from '../types';
 import { paymentState, type PaymentState } from './clientPortal';
+import { formatHoursMinutes } from './duration';
 
 /**
  * The client invoice, built with the same rules as the website's InvoiceView
@@ -139,9 +140,9 @@ export function buildInvoice(
   lines.push({
     title: svc?.name || b.serviceType,
     note: itemized
-      ? `Minimum duration guidance - ${formatHours(breakdown.baseHours)}h (instruction only, not charged)`
-      : `Booked duration - ${formatHours(breakdown.totalHours)}h at ${gbp(rate)} per hour`,
-    time: itemized ? `${formatHours(breakdown.baseHours)}h` : undefined,
+      ? `Minimum duration guidance - ${formatHoursMinutes(breakdown.baseHours)} (instruction only, not charged)`
+      : `Booked duration - ${formatHoursMinutes(breakdown.totalHours)} at ${gbp(rate)} per hour`,
+    time: itemized ? `${formatHoursMinutes(breakdown.baseHours)}` : undefined,
     amount: itemized ? gbp(0) : `${gbp(rate)}/hr`,
   });
   for (const item of b.extras ?? []) {
@@ -150,7 +151,7 @@ export function buildInvoice(
     lines.push({
       title: `${extraLabel(ex?.name || String(item.id))} x ${item.quantity}`,
       note: itemized ? 'Scope / add-on (own price & est. time)' : 'Extra Service Add-on',
-      time: itemized ? (tl ? `${formatHours(tl.lineHours)}h` : '-') : undefined,
+      time: itemized ? (tl ? `${formatHoursMinutes(tl.lineHours)}` : '-') : undefined,
       amount: gbp(Number(ex?.price || 0) * item.quantity),
     });
   }
@@ -238,10 +239,10 @@ export function invoiceHtml(
     .join('');
   const tl = inv.breakdown;
   const timeRows = tl.lines.length
-    ? `<tr><td>${esc(tl.baseLabel)}</td><td class="r"><b>${formatHours(tl.baseHours)}h</b></td></tr>` +
-      tl.lines.map((l) => `<tr><td>${esc(l.label)} ×${l.quantity}</td><td class="r"><b>${formatHours(l.lineHours)}h</b></td></tr>`).join('') +
-      `<tr class="tot"><td>TOTAL BOOKED</td><td class="r blue">${formatHours(tl.totalHours)}h</td></tr>`
-    : `<tr><td>${tl.model === 'itemized' ? esc(tl.baseLabel) : 'Booked clean duration'}</td><td class="r blue"><b>${formatHours(tl.totalHours)}h</b></td></tr>`;
+    ? `<tr><td>${esc(tl.baseLabel)}</td><td class="r"><b>${formatHoursMinutes(tl.baseHours)}</b></td></tr>` +
+      tl.lines.map((l) => `<tr><td>${esc(l.label)} ×${l.quantity}</td><td class="r"><b>${formatHoursMinutes(l.lineHours)}</b></td></tr>`).join('') +
+      `<tr class="tot"><td>TOTAL BOOKED</td><td class="r blue">${formatHoursMinutes(tl.totalHours)}</td></tr>`
+    : `<tr><td>${tl.model === 'itemized' ? esc(tl.baseLabel) : 'Booked clean duration'}</td><td class="r blue"><b>${formatHoursMinutes(tl.totalHours)}</b></td></tr>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(inv.number)}</title>
 <style>

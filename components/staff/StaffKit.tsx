@@ -5,6 +5,7 @@ import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking, DayAvailability, Staff } from '../../types';
 import { PhotoBackdrop, PressableScale, Shine } from '../Motion';
 import { servicePhoto } from '../media';
+import { formatHoursMinutes } from '../../utils/duration';
 
 /* ───────────── Shared rules (same as the website and the server) ───────────── */
 
@@ -228,7 +229,7 @@ export function JobCard({
       <View style={[kit.jobTime, completed && kit.jobTimeDone]}>
         <Text style={[kit.jobTimeStart, completed && { color: COLORS.status.completed }]}>{booking.time || '--:--'}</Text>
         <Text style={kit.jobTimeEnd}>to {endTime(booking.time, hours)}</Text>
-        <Text style={kit.jobTimeHours}>{hours}h</Text>
+        <Text style={kit.jobTimeHours}>{formatHoursMinutes(Number(hours))}</Text>
       </View>
       <View style={kit.jobBody}>
         <View style={kit.jobTop}>

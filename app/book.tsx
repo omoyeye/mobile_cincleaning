@@ -378,7 +378,7 @@ export default function BookScreen() {
 
     if (isStandard) {
       const totalHrs = durationHours + durationMinutes / 60;
-      const durLabel = durationMinutes > 0 ? `${durationHours}h 30m` : `${durationHours}h`;
+      const durLabel = durationMinutes > 0 ? `${durationHours}h 30min` : `${durationHours}h`;
       const chosen = selectedExtras
         .map((se) => {
           const ex = extras.find((e) => e.id === se.id);
@@ -438,7 +438,7 @@ export default function BookScreen() {
     } else {
       const totalHrs = durationHours + durationMinutes / 60;
       const baseCost = baseRate * totalHrs;
-      const durLabel = durationMinutes > 0 ? `${durationHours}h 30m` : `${durationHours}h`;
+      const durLabel = durationMinutes > 0 ? `${durationHours}h 30min` : `${durationHours}h`;
       lines.push({ label: `${selectedService.name} (${durLabel})`, amount: baseCost });
 
       let extrasTotal = 0;
@@ -1335,7 +1335,7 @@ export default function BookScreen() {
                     value={
                       isAirbnb
                         ? `${resolveAirbnbHours(property.bedrooms || 0)} hours (fixed)`
-                        : durationMinutes > 0 ? `${durationHours}h 30m` : `${durationHours} hours`
+                        : durationMinutes > 0 ? `${durationHours}h 30min` : `${durationHours} hours`
                     }
                   />
                 )}
