@@ -23,7 +23,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { bookingsApi, staffApi, customerApi, mapsApi, publicApi } from '../../services/api';
 import { useToast } from '../../components/Toast';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
-import type { Booking, BookingTracking } from '../../types';
+import type { Booking, BookingTracking, Staff } from '../../types';
+import { findMe, jobPay } from '../../components/staff/StaffKit';
 import { distanceKm, formatClock, isTodayYmd, minutesAgo } from '../../utils/tracking';
 import { StatusBadge, friendlyDay, serviceLabel, money } from '../../components/ClientKit';
 import { Image as Photo } from 'expo-image';
@@ -143,6 +144,13 @@ export default function BookingDetailScreen() {
   }, [id]);
 
   useEffect(() => { fetchBooking(); }, [fetchBooking]);
+
+  // Staff see their own pay for the job, never what the client pays.
+  const [me, setMe] = useState<Staff | null>(null);
+  useEffect(() => {
+    if (user?.role !== 'staff') return;
+    staffApi.getStaffList().then((list) => setMe(findMe(list, user))).catch(() => {});
+  }, [user?.id]);
 
   const [tracking, setTracking] = useState<BookingTracking | null>(null);
   const [jobCoords, setJobCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -337,7 +345,13 @@ export default function BookingDetailScreen() {
           </View>
           <View style={styles.heroTop}>
             <StatusBadge status={booking.status} />
-            <Text style={styles.heroPrice}>{money(booking.totalPrice)}</Text>
+            {isStaff ? (
+              me && jobPay(booking, me.hourlyRate).pay > 0 ? (
+                <Text style={[styles.heroPrice, styles.heroPay]}>{money(jobPay(booking, me.hourlyRate).pay)} your pay</Text>
+              ) : null
+            ) : (
+              <Text style={styles.heroPrice}>{money(booking.totalPrice)}</Text>
+            )}
           </View>
           <Text style={[styles.heroService, cancelled && styles.heroServiceCancelled]}>{serviceLabel(booking.serviceType)}</Text>
           <Text style={styles.heroWhen}>
@@ -348,6 +362,12 @@ export default function BookingDetailScreen() {
             {hours ? ` · ${formatHoursMinutes(Number(hours))}` : ''}
             {booking.frequency && booking.frequency !== 'One-time' ? ` · ${booking.frequency}` : ''}
           </Text>
+          {!isStaff && Number(booking.referralCreditUsed) > 0 ? (
+            <View style={styles.creditNote}>
+              <Ionicons name="gift-outline" size={14} color={COLORS.secondary} />
+              <Text style={styles.creditNoteText}>{money(Number(booking.referralCreditUsed))} referral credit taken off</Text>
+            </View>
+          ) : null}
 
           {cancelled ? (
             <View style={styles.cancelNote}>
@@ -487,7 +507,7 @@ export default function BookingDetailScreen() {
         ) : null}
 
         {/* Price breakdown (only when a discount needs explaining; the total is in the summary) */}
-        {booking.discountCode ? (
+        {booking.discountCode && !isStaff ? (
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
               <Text style={styles.priceSub}>Discount ({booking.discountCode})</Text>
@@ -876,6 +896,9 @@ const styles = StyleSheet.create({
   },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   heroPrice: { fontSize: 20, fontWeight: '800', color: COLORS.text },
+  heroPay: { fontSize: 16, color: COLORS.secondary },
+  creditNote: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  creditNoteText: { fontSize: 12.5, fontWeight: '700', color: COLORS.secondary },
   heroService: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginTop: SPACING.md, letterSpacing: -0.3 },
   heroServiceCancelled: { textDecorationLine: 'line-through', color: COLORS.textSecondary },
   heroWhen: { fontSize: 17, fontWeight: '700', color: COLORS.primary, marginTop: 4 },

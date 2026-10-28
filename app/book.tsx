@@ -23,7 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { FadeInUp, PressableScale } from '../components/Motion';
 import { servicePhoto, wrapName } from '../components/media';
 import { useAuth } from '../contexts/AuthContext';
-import { publicApi, bookingsApi } from '../services/api';
+import { publicApi, bookingsApi, customerApi } from '../services/api';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
 import type { Booking, ServiceConfig, Extra, SelectedExtra, PropertyDetails } from '../types';
 import { calculateHourlyPrice, hourlyRateFor, londonRateOf, lookupPricingRegion, type PricingRegion } from '../utils/pricing';
@@ -372,7 +372,7 @@ export default function BookScreen() {
     });
   }, [findExtraByName]);
 
-  const breakdown = useMemo((): { lines: BreakdownLine[]; total: number; tipAmount: number } => {
+  const baseBreakdown = useMemo((): { lines: BreakdownLine[]; total: number; tipAmount: number } => {
     if (!selectedService) return { lines: [], total: 0, tipAmount: 0 };
     const lines: BreakdownLine[] = [];
     const baseRate = Number(selectedService.baseRate) || 0;
@@ -498,6 +498,24 @@ export default function BookScreen() {
       selectedExtras, extras, materials, appliedDiscount, tipPercent, customTip, useCustomTip,
       isQuoteBased, isAirbnb, isDeepOrEOT, isStandard, effectiveRate, pricingRegion]);
 
+  // Referral credit (cleaning credit, no cash value). The server takes it off when the booking is saved;
+  // here it is shown so the client sees the price they will actually pay.
+  const [creditBalance, setCreditBalance] = useState(0);
+  useEffect(() => {
+    if (user?.role !== 'customer') return;
+    customerApi.getReferralSummary().then((r) => setCreditBalance(r.credit?.balance ?? 0)).catch(() => {});
+  }, [user?.id]);
+  const breakdown = useMemo(() => {
+    const credit = isQuoteBased ? 0 : Math.min(creditBalance, baseBreakdown.total);
+    if (!(credit > 0)) return { ...baseBreakdown, credit: 0 };
+    return {
+      ...baseBreakdown,
+      lines: [...baseBreakdown.lines, { label: 'Referral credit', amount: -credit, type: 'discount' as const }],
+      total: Math.round((baseBreakdown.total - credit) * 100) / 100,
+      credit,
+    };
+  }, [baseBreakdown, creditBalance, isQuoteBased]);
+
   const toggleDrawer = useCallback(() => {
     const toValue = summaryExpanded ? 0 : 1;
     setSummaryExpanded(!summaryExpanded);
@@ -589,7 +607,8 @@ export default function BookScreen() {
         serviceType: selectedService?.name || 'General/Standard Cleaning',
         date,
         time,
-        totalPrice: breakdown.total,
+        // Full price: the server applies referral credit itself.
+        totalPrice: baseBreakdown.total,
         depositTermsAccepted: termsAccepted,
         paymentChoice: isQuoteBased ? 'deposit' : paymentChoice,
         address: { line1: address.line1, city: address.city, postcode: address.postcode },

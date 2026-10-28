@@ -96,6 +96,8 @@ export interface Booking {
   stripePaymentLink?: string;
   priceRegion?: 'london' | 'standard' | null;
   hourlyRate?: number | string | null;
+  /** Referral credit taken off this booking (clients only; cleaning credit, no cash value). */
+  referralCreditUsed?: number | string | null;
   /** ISO time the cleaner tapped "Start travel". */
   enRouteAt?: string | null;
   depositTermsAcceptedAt?: string | null;
@@ -174,6 +176,45 @@ export interface Staff {
   accountHolder?: string;
   accountNumber?: string;
   sortCode?: string;
+  /** 'contracted' staff get paid holiday; 'self_employed' (the default) do not. */
+  contractType?: string;
+}
+
+export type HolidayStatus = 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
+
+export interface StaffHoliday {
+  id: number;
+  staffId: number;
+  startDate: string;
+  endDate: string;
+  halfDay: boolean;
+  days: number;
+  holidayYear: number;
+  status: HolidayStatus;
+  note: string | null;
+  adminNote: string | null;
+  decidedAt: string | null;
+  payStatus: 'unpaid' | 'claimed' | 'paid';
+  payAmount: number | null;
+  staffInvoiceId: number | null;
+  createdAt: string | null;
+}
+
+export interface HolidayBalance { allowance: number; taken: number; confirmed: number; pending: number; remaining: number }
+export interface ClaimableHoliday { id: number; startDate: string; endDate: string; days: number; hours: number; hourlyRate: number; amount: number }
+
+/** One holiday year (April to March) for a cleaner, as returned by /api/staff/:id/holidays. */
+export interface StaffHolidayYear {
+  staff: { id: number; name: string; contracted: boolean; allowance: number; hoursPerDay: number; hourlyRate: number; dailyPay: number };
+  year: number;
+  currentYear: number;
+  yearLabel: string;
+  yearStart: string;
+  yearEnd: string;
+  today: string;
+  balance: HolidayBalance;
+  holidays: StaffHoliday[];
+  claimable: ClaimableHoliday[];
 }
 
 export interface Notification {
@@ -192,8 +233,29 @@ export interface Referral {
   referrerType: 'staff' | 'customer';
   referredClientName: string;
   dateReferred: string;
-  status: 'Pending' | 'Completed' | 'Paid Out';
+  status: 'Pending' | 'Completed' | 'Paid Out' | 'Rejected';
   rewardAmount: number;
+  payStatus?: 'unpaid' | 'claimed' | 'paid';
+}
+
+/** A staff referral bonus that has unlocked and can go on the weekly invoice. */
+export interface ClaimableReferral { id: number; friendName: string; amount: number; unlockedAt: string | null }
+
+/** Referral balance for the signed-in user (/api/referrals/summary). */
+export interface ReferralSummary {
+  role: 'customer' | 'staff';
+  code: string | null;
+  rewardAmount: number;
+  /** Waiting for the friend's first clean. */
+  pending: number;
+  /** Unlocked in total (used or not). */
+  unlocked: number;
+  /** Clients: cleaning credit (no cash value) taken off the next booking automatically. */
+  credit?: { earned: number; used: number; balance: number };
+  /** Staff: bonuses ready to add to the weekly invoice. */
+  claimable?: ClaimableReferral[];
+  claimed?: number;
+  paid?: number;
 }
 
 export interface WorkCompletionData {

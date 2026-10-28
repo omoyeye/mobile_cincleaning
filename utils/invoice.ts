@@ -165,6 +165,16 @@ export function buildInvoice(
     });
   }
 
+  const credit = Number(b.referralCreditUsed) || 0;
+  if (credit > 0) {
+    lines.push({
+      title: 'Referral credit',
+      note: 'Cleaning credit from referring a friend (no cash value)',
+      time: itemized ? '-' : undefined,
+      amount: `-${gbp(credit)}`,
+    });
+  }
+
   const depositPercent = Math.min(100, Math.max(0, Number(policy.depositPercent) || 0));
   const property = b.propertyDetails
     ? [

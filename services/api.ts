@@ -18,6 +18,9 @@ import type {
   DirectMessage,
   BookingTracking,
   LateNotice,
+  StaffHoliday,
+  StaffHolidayYear,
+  ReferralSummary,
 } from '../types';
 
 export { getToken, setToken, clearToken };
@@ -240,6 +243,7 @@ export const customerApi = {
   validateDiscount: (code: string) => publicApi.validateDiscount(code),
 
   getReferrals: (userId: number) => request<Referral[]>(`/api/referrals?userId=${userId}`),
+  getReferralSummary: () => request<ReferralSummary>('/api/referrals/summary'),
 
   getStaffList: () => request<PublicStaff[]>('/api/staff'),
 
@@ -354,11 +358,27 @@ export const staffApi = {
     bankDetails: any;
     weekTotalHours?: number;
     weekJobCount?: number;
+    /** Approved holiday to add; the server works out the holiday pay itself. */
+    holidayIds?: number[];
+    /** Unlocked referral bonuses to add; the server checks and prices them. */
+    referralRewardIds?: number[];
   }) =>
     request(`/api/staff/${staffId}/invoice`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // ─── Holiday (contracted staff) ───
+  getHolidays: (staffId: number, year?: number) =>
+    request<StaffHolidayYear>(`/api/staff/${staffId}/holidays${year ? `?year=${year}` : ''}`),
+
+  createHoliday: (staffId: number, body: { startDate: string; endDate: string; halfDay?: boolean; note?: string }) =>
+    request<StaffHoliday>(`/api/staff/${staffId}/holidays`, { method: 'POST', body: JSON.stringify(body) }),
+
+  updateHoliday: (id: number, body: { startDate?: string; endDate?: string; halfDay?: boolean; note?: string }) =>
+    request<StaffHoliday>(`/api/holidays/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  cancelHoliday: (id: number) => request<unknown>(`/api/holidays/${id}`, { method: 'DELETE' }),
 
   getInvoiceHistory: (staffId: number) =>
     request<StaffInvoice[]>(`/api/staff/${staffId}/invoices-history`),
@@ -370,6 +390,7 @@ export const staffApi = {
     request(`/api/notifications/${id}`, { method: 'DELETE' }),
 
   getReferrals: (userId: number) => request<Referral[]>(`/api/referrals?userId=${userId}&type=staff`),
+  getReferralSummary: () => request<ReferralSummary>('/api/referrals/summary'),
 
   getChat: (bookingId: number) => bookingsApi.getChat(bookingId),
   sendChat: (bookingId: number, text: string) => bookingsApi.sendChat(bookingId, text),

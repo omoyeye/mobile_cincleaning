@@ -135,6 +135,9 @@ export default function StaffProfileScreen() {
     {
       title: 'Work',
       items: [
+        ...(staff?.contractType === 'contracted'
+          ? [{ icon: 'sunny-outline', label: 'Holiday', sub: 'Book paid holiday and see what is left', onPress: () => router.push('/holiday') } as MenuItem]
+          : []),
         { icon: 'alarm-outline', label: 'Running Late', sub: 'Notify client & office of a delay', onPress: () => router.push('/running-late') },
         { icon: 'people-outline', label: 'Referrals', sub: `${referrals.length} referral${referrals.length !== 1 ? 's' : ''}`, onPress: () => router.push('/referrals') },
         { icon: 'document-text-outline', label: 'Contracts & Documents', onPress: () => Alert.alert('Contracts & Documents', 'Your employment contract and related documents are managed by CiN Cleaning. Contact your manager or email support@cleanitneatly.com for copies.') },

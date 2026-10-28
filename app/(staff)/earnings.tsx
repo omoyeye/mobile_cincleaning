@@ -9,7 +9,8 @@ import { useToast } from '../../components/Toast';
 import { ListSkeleton, StatsSkeleton } from '../../components/SkeletonLoader';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, Card, EmptyState, ScreenHeader, SectionTitle, StatusBadge, findMe, jobPay, localWeekRange } from '../../components/staff/StaffKit';
-import type { Booking, Staff, StaffInvoice } from '../../types';
+import type { Booking, ClaimableHoliday, ClaimableReferral, Staff, StaffInvoice } from '../../types';
+import { holidayRange, pluralDays } from '../../components/staff/HolidayKit';
 import { formatHoursMinutes } from '../../utils/duration';
 import { BrandRefresh } from '../../components/BrandRefresh';
 import { usePullRefresh } from '../../hooks/usePullRefresh';
@@ -53,6 +54,12 @@ export default function EarningsScreen() {
   const [loading, setLoading] = useState(true);
   const { refreshing, onRefresh } = usePullRefresh(() => fetchData());
   const [submittingInvoice, setSubmittingInvoice] = useState(false);
+  // Approved holiday that has started and not been claimed yet (contracted staff only).
+  const [claimable, setClaimable] = useState<ClaimableHoliday[]>([]);
+  const [holidayIds, setHolidayIds] = useState<number[]>([]);
+  // Referral bonuses that unlocked and are not on an invoice yet.
+  const [bonuses, setBonuses] = useState<ClaimableReferral[]>([]);
+  const [bonusIds, setBonusIds] = useState<number[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -67,6 +74,19 @@ export default function EarningsScreen() {
         ]);
         setInvoices(Array.isArray(hist) ? hist : []);
         setWeek(weekly && Array.isArray(weekly.jobs) ? (weekly as WeekInvoice) : null);
+        const ref = await staffApi.getReferralSummary().catch(() => null);
+        const claimableBonuses = ref?.claimable ?? [];
+        setBonuses(claimableBonuses);
+        setBonusIds(claimableBonuses.map((b) => b.id));
+        if (me.contractType === 'contracted') {
+          const hol = await staffApi.getHolidays(me.id).catch(() => null);
+          const list = hol?.claimable ?? [];
+          setClaimable(list);
+          setHolidayIds(list.map((h) => h.id));
+        } else {
+          setClaimable([]);
+          setHolidayIds([]);
+        }
       }
     } catch {
       showToast('Could not load earnings data', 'error');
@@ -95,6 +115,18 @@ export default function EarningsScreen() {
   const weekTotal = week ? Number(week.totalShare || 0) : 0;
   const weekJobs = week?.jobs ?? [];
   const weekHours = weekJobs.reduce((s, j) => s + Number(j.yourHours || 0), 0);
+  const isContracted = staff?.contractType === 'contracted';
+  const pickedHolidays = claimable.filter((h) => holidayIds.includes(h.id));
+  const holidayTotal = pickedHolidays.reduce((s, h) => s + h.amount, 0);
+  const holidayHours = pickedHolidays.reduce((s, h) => s + h.hours, 0);
+  const pickedBonuses = bonuses.filter((b) => bonusIds.includes(b.id));
+  const bonusTotal = pickedBonuses.reduce((s, b) => s + b.amount, 0);
+  const extrasTotal = holidayTotal + bonusTotal;
+  const canSubmit = weekJobs.length > 0 || pickedHolidays.length > 0 || pickedBonuses.length > 0;
+  const toggleBonus = (id: number) =>
+    setBonusIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  const toggleHoliday = (id: number) =>
+    setHolidayIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
   const chart = (() => {
     const data: number[] = [];
@@ -112,8 +144,8 @@ export default function EarningsScreen() {
 
   const handleSubmitInvoice = async () => {
     if (!staff) return;
-    if (weekJobs.length === 0) {
-      Alert.alert('Nothing to invoice yet', 'You have no completed jobs this week.');
+    if (!canSubmit) {
+      Alert.alert('Nothing to invoice yet', `You have no completed jobs this week${isContracted ? ', holiday pay' : ''} or referral bonuses to claim.`);
       return;
     }
     if (!staff.bankName || !staff.accountNumber || !staff.sortCode) {
@@ -132,8 +164,10 @@ export default function EarningsScreen() {
         bankDetails: { bankName: staff.bankName, accountNumber: staff.accountNumber, sortCode: staff.sortCode },
         weekTotalHours: weekHours,
         weekJobCount: weekJobs.length,
+        holidayIds: pickedHolidays.map((h) => h.id),
+        referralRewardIds: pickedBonuses.map((b) => b.id),
       });
-      showToast(`Invoice for £${weekTotal.toFixed(2)} submitted`, 'success');
+      showToast(`Invoice for £${(weekTotal + extrasTotal).toFixed(2)} submitted`, 'success');
       await fetchData();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not submit invoice', 'error');
@@ -171,13 +205,15 @@ export default function EarningsScreen() {
           <Text style={styles.heroLabel}>
             This week · {shortDate(weekRange.start)} to {shortDate(weekRange.end)}
           </Text>
-          <Text style={styles.heroValue}>{'£'}{weekTotal.toFixed(2)}</Text>
+          <Text style={styles.heroValue}>{'£'}{(weekTotal + extrasTotal).toFixed(2)}</Text>
           <Text style={styles.heroSub}>
-            {weekJobs.length} {weekJobs.length === 1 ? 'job' : 'jobs'} · {weekHours.toFixed(2)} of your hours
+            {weekJobs.length} {weekJobs.length === 1 ? 'job' : 'jobs'} · {formatHoursMinutes(weekHours + holidayHours)} of your hours
+            {pickedHolidays.length ? ` · includes £${holidayTotal.toFixed(2)} holiday pay` : ''}
+            {pickedBonuses.length ? ` · + £${bonusTotal.toFixed(2)} referral bonus` : ''}
           </Text>
           {staff ? (
             <TouchableOpacity
-              style={[styles.heroBtn, (submittingInvoice || weekJobs.length === 0) && { opacity: 0.6 }]}
+              style={[styles.heroBtn, (submittingInvoice || !canSubmit) && { opacity: 0.6 }]}
               onPress={handleSubmitInvoice}
               disabled={submittingInvoice}
               activeOpacity={0.85}
@@ -207,6 +243,92 @@ export default function EarningsScreen() {
             </View>
           ))}
         </View>
+
+        {isContracted ? (
+          <>
+            <SectionTitle
+              right={
+                <TouchableOpacity onPress={() => router.push('/holiday')} hitSlop={8} style={styles.linkRow}>
+                  <Ionicons name="sunny-outline" size={14} color={COLORS.primary} />
+                  <Text style={styles.link}>Holiday</Text>
+                </TouchableOpacity>
+              }
+            >
+              Holiday pay
+            </SectionTitle>
+            {claimable.length === 0 ? (
+              <Card style={{ marginBottom: SPACING.base }}>
+                <Text style={styles.muted}>No holiday pay waiting. It shows here once an approved holiday has started.</Text>
+              </Card>
+            ) : (
+              <Card style={{ paddingVertical: 4, marginBottom: SPACING.base }}>
+                {claimable.map((h, i) => {
+                  const on = holidayIds.includes(h.id);
+                  return (
+                    <TouchableOpacity
+                      key={h.id}
+                      style={[styles.row, i < claimable.length - 1 && styles.rowBorder]}
+                      onPress={() => toggleHoliday(h.id)}
+                      activeOpacity={0.7}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}
+                    >
+                      <View style={[styles.check, on && styles.checkOn]}>
+                        {on ? <Ionicons name="checkmark" size={14} color={COLORS.white} /> : null}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rowTitle}>{holidayRange(h)}</Text>
+                        <Text style={styles.rowMeta}>
+                          {pluralDays(h.days)} · {formatHoursMinutes(h.hours)} × {'£'}{h.hourlyRate.toFixed(2)}
+                        </Text>
+                      </View>
+                      <Text style={styles.rowAmount}>{'£'}{h.amount.toFixed(2)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </Card>
+            )}
+          </>
+        ) : null}
+
+        {bonuses.length > 0 ? (
+          <>
+            <SectionTitle
+              right={
+                <TouchableOpacity onPress={() => router.push('/referrals')} hitSlop={8} style={styles.linkRow}>
+                  <Ionicons name="gift-outline" size={14} color={COLORS.primary} />
+                  <Text style={styles.link}>Referrals</Text>
+                </TouchableOpacity>
+              }
+            >
+              Referral bonuses
+            </SectionTitle>
+            <Card style={{ paddingVertical: 4, marginBottom: SPACING.base }}>
+              {bonuses.map((b, i) => {
+                const on = bonusIds.includes(b.id);
+                return (
+                  <TouchableOpacity
+                    key={b.id}
+                    style={[styles.row, i < bonuses.length - 1 && styles.rowBorder]}
+                    onPress={() => toggleBonus(b.id)}
+                    activeOpacity={0.7}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                  >
+                    <View style={[styles.check, on && styles.checkOn]}>
+                      {on ? <Ionicons name="checkmark" size={14} color={COLORS.white} /> : null}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowTitle}>{b.friendName}</Text>
+                      <Text style={styles.rowMeta}>Referral bonus · first clean done</Text>
+                    </View>
+                    <Text style={styles.rowAmount}>{'£'}{b.amount.toFixed(2)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </Card>
+          </>
+        ) : null}
 
         {bookings.length > 0 && <MiniBarChart data={chart.data} labels={chart.labels} />}
 
@@ -302,6 +424,11 @@ const chartStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  link: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  muted: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 19 },
+  check: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  checkOn: { backgroundColor: COLORS.secondary, borderColor: COLORS.secondary },
   safe: { flex: 1, backgroundColor: COLORS.background },
   scroll: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },
   rate: {
