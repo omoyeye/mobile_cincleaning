@@ -231,6 +231,7 @@ export default function RegisterScreen() {
                 <AuthField
                   label="Referral code"
                   icon="gift-outline"
+                  hint="Your friend's code gives you credit off your first clean."
                   value={referralCode}
                   onChangeText={setReferralCode}
                   placeholder="e.g. ABCD1234"

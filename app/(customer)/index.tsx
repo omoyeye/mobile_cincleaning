@@ -241,7 +241,9 @@ export default function CustomerHome() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.loyaltyTitle}>{points} loyalty points</Text>
-              <Text style={styles.loyaltySub}>Worth {money(points / 100)} off a future clean</Text>
+              <Text style={styles.loyaltySub}>
+                {points >= 10 ? `Worth £${Math.floor(points / 10)} off your next clean (10 points = £1)` : 'Collect 10 points for £1 off a clean'}
+              </Text>
             </View>
           </FadeInUp>
         )}

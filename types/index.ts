@@ -98,6 +98,9 @@ export interface Booking {
   hourlyRate?: number | string | null;
   /** Referral credit taken off this booking (clients only; cleaning credit, no cash value). */
   referralCreditUsed?: number | string | null;
+  /** Loyalty points spent on this booking and the amount taken off. */
+  pointsRedeemed?: number | null;
+  pointsDiscount?: number | string | null;
   /** ISO time the cleaner tapped "Start travel". */
   enRouteAt?: string | null;
   depositTermsAcceptedAt?: string | null;
@@ -251,7 +254,11 @@ export interface ReferralSummary {
   /** Unlocked in total (used or not). */
   unlocked: number;
   /** Clients: cleaning credit (no cash value) taken off the next booking automatically. */
-  credit?: { earned: number; used: number; balance: number };
+  credit?: { earned: number; used: number; balance: number; welcome?: number };
+  /** Clients: loyalty points and what they are worth (10 points = £1, cleaning only). */
+  points?: { balance: number; value: number };
+  /** Clients: can still add a friend's referral code (not referred yet, no clean yet). */
+  canApplyCode?: boolean;
   /** Staff: bonuses ready to add to the weekly invoice. */
   claimable?: ClaimableReferral[];
   claimed?: number;

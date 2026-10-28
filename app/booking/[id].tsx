@@ -368,6 +368,12 @@ export default function BookingDetailScreen() {
               <Text style={styles.creditNoteText}>{money(Number(booking.referralCreditUsed))} referral credit taken off</Text>
             </View>
           ) : null}
+          {!isStaff && Number(booking.pointsDiscount) > 0 ? (
+            <View style={styles.creditNote}>
+              <Ionicons name="diamond-outline" size={14} color={COLORS.secondary} />
+              <Text style={styles.creditNoteText}>{money(Number(booking.pointsDiscount))} off with {booking.pointsRedeemed || ''} loyalty points</Text>
+            </View>
+          ) : null}
 
           {cancelled ? (
             <View style={styles.cancelNote}>

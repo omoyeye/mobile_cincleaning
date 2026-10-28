@@ -154,6 +154,8 @@ export const bookingsApi = {
     duration?: number;
     tipAmount?: number;
     paymentChoice?: 'deposit' | 'full';
+    /** Spend loyalty points on this booking (10 points = £1). */
+    usePoints?: boolean;
   }) =>
     request<{ id: number; bookingId: string; message: string; stripePaymentLink?: string }>('/api/bookings', {
       method: 'POST',
@@ -244,6 +246,9 @@ export const customerApi = {
 
   getReferrals: (userId: number) => request<Referral[]>(`/api/referrals?userId=${userId}`),
   getReferralSummary: () => request<ReferralSummary>('/api/referrals/summary'),
+  /** Add a friend's code before the first clean; returns the welcome credit. */
+  applyReferralCode: (code: string) =>
+    request<{ welcomeCredit: number }>('/api/referrals/apply', { method: 'POST', body: JSON.stringify({ code }) }),
 
   getStaffList: () => request<PublicStaff[]>('/api/staff'),
 

@@ -11,6 +11,7 @@ import {
   Platform,
   Animated,
   KeyboardAvoidingView,
+  Switch,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -501,20 +502,58 @@ export default function BookScreen() {
   // Referral credit (cleaning credit, no cash value). The server takes it off when the booking is saved;
   // here it is shown so the client sees the price they will actually pay.
   const [creditBalance, setCreditBalance] = useState(0);
-  useEffect(() => {
+  const [pointsBalance, setPointsBalance] = useState(0);
+  const [canApplyCode, setCanApplyCode] = useState(false);
+  const [usePoints, setUsePoints] = useState(true);
+  const [refCode, setRefCode] = useState('');
+  const [refBusy, setRefBusy] = useState(false);
+  const [refMsg, setRefMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const loadRewards = useCallback(() => {
     if (user?.role !== 'customer') return;
-    customerApi.getReferralSummary().then((r) => setCreditBalance(r.credit?.balance ?? 0)).catch(() => {});
+    customerApi
+      .getReferralSummary()
+      .then((r) => {
+        setCreditBalance(r.credit?.balance ?? 0);
+        setPointsBalance(r.points?.balance ?? 0);
+        setCanApplyCode(!!r.canApplyCode);
+      })
+      .catch(() => {});
   }, [user?.id]);
+  useEffect(() => { loadRewards(); }, [loadRewards]);
+
+  const applyCode = async () => {
+    const code = refCode.trim().toUpperCase();
+    if (!code) return;
+    setRefBusy(true);
+    setRefMsg(null);
+    try {
+      const r = await customerApi.applyReferralCode(code);
+      setRefMsg({ ok: true, text: r.welcomeCredit > 0 ? `£${r.welcomeCredit.toFixed(2)} welcome credit added.` : 'Code added.' });
+      setRefCode('');
+      loadRewards();
+    } catch (e) {
+      setRefMsg({ ok: false, text: e instanceof Error ? e.message : 'That code could not be added.' });
+    } finally {
+      setRefBusy(false);
+    }
+  };
+
+  // Mirrors the server: referral credit first, then whole pounds of points (10 points = £1).
   const breakdown = useMemo(() => {
-    const credit = isQuoteBased ? 0 : Math.min(creditBalance, baseBreakdown.total);
-    if (!(credit > 0)) return { ...baseBreakdown, credit: 0 };
-    return {
-      ...baseBreakdown,
-      lines: [...baseBreakdown.lines, { label: 'Referral credit', amount: -credit, type: 'discount' as const }],
-      total: Math.round((baseBreakdown.total - credit) * 100) / 100,
-      credit,
-    };
-  }, [baseBreakdown, creditBalance, isQuoteBased]);
+    let total = baseBreakdown.total;
+    const lines = [...baseBreakdown.lines];
+    const credit = isQuoteBased ? 0 : Math.min(creditBalance, total);
+    if (credit > 0) {
+      lines.push({ label: 'Referral credit', amount: -credit, type: 'discount' as const });
+      total = Math.round((total - credit) * 100) / 100;
+    }
+    const pointsPounds = isQuoteBased || !usePoints ? 0 : Math.min(Math.floor(pointsBalance / 10), Math.floor(total));
+    if (pointsPounds > 0) {
+      lines.push({ label: `Loyalty points (${pointsPounds * 10})`, amount: -pointsPounds, type: 'discount' as const });
+      total = Math.round((total - pointsPounds) * 100) / 100;
+    }
+    return { ...baseBreakdown, lines, total, credit, pointsPounds };
+  }, [baseBreakdown, creditBalance, pointsBalance, usePoints, isQuoteBased]);
 
   const toggleDrawer = useCallback(() => {
     const toValue = summaryExpanded ? 0 : 1;
@@ -611,6 +650,7 @@ export default function BookScreen() {
         totalPrice: baseBreakdown.total,
         depositTermsAccepted: termsAccepted,
         paymentChoice: isQuoteBased ? 'deposit' : paymentChoice,
+        usePoints: !isQuoteBased && usePoints && pointsBalance >= 10,
         address: { line1: address.line1, city: address.city, postcode: address.postcode },
         contact: { name: contactName, email: contactEmail, phone: contactPhone },
         propertyDetails: {
@@ -1491,6 +1531,63 @@ export default function BookScreen() {
                 </View>
               </View>
 
+              {/* Rewards: loyalty points and a friend's referral code */}
+              {!isQuoteBased && (pointsBalance >= 10 || canApplyCode) ? (
+                <View style={styles.rewardsCard}>
+                  <View style={styles.termsHead}>
+                    <Ionicons name="gift-outline" size={20} color={COLORS.secondary} />
+                    <Text style={styles.termsTitle}>Your rewards</Text>
+                  </View>
+                  {pointsBalance >= 10 ? (
+                    <View style={styles.rewardRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rewardTitle}>Use my points</Text>
+                        <Text style={styles.rewardSub}>
+                          {pointsBalance} points · worth £{Math.floor(pointsBalance / 10)} off this clean
+                        </Text>
+                      </View>
+                      <Switch
+                        value={usePoints}
+                        onValueChange={setUsePoints}
+                        trackColor={{ false: COLORS.border, true: COLORS.secondary + '70' }}
+                        thumbColor={usePoints ? COLORS.secondary : '#f4f4f5'}
+                        accessibilityLabel="Use my loyalty points"
+                      />
+                    </View>
+                  ) : null}
+                  {canApplyCode ? (
+                    <View style={styles.rewardCodeWrap}>
+                      <Text style={styles.rewardTitle}>Have a referral code?</Text>
+                      <Text style={styles.rewardSub}>A friend's code gives you credit off your first clean.</Text>
+                      <View style={styles.rewardCodeRow}>
+                        <TextInput
+                          style={styles.rewardInput}
+                          value={refCode}
+                          onChangeText={(v) => { setRefCode(v); setRefMsg(null); }}
+                          placeholder="e.g. CINAB12"
+                          placeholderTextColor={COLORS.textTertiary}
+                          autoCapitalize="characters"
+                          autoCorrect={false}
+                          returnKeyType="done"
+                          onSubmitEditing={applyCode}
+                        />
+                        <TouchableOpacity
+                          style={[styles.rewardApply, (!refCode.trim() || refBusy) && { opacity: 0.5 }]}
+                          onPress={applyCode}
+                          disabled={!refCode.trim() || refBusy}
+                        >
+                          {refBusy ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={styles.rewardApplyText}>Apply</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : null}
+                  {refMsg ? (
+                    <Text style={[styles.rewardMsg, { color: refMsg.ok ? COLORS.success : COLORS.error }]}>{refMsg.text}</Text>
+                  ) : null}
+                  <Text style={styles.rewardFine}>Credit and points can only be used towards cleaning. No cash value.</Text>
+                </View>
+              ) : null}
+
               {/* Payment and terms (website: invoice step deposit agreement) */}
               <View style={styles.termsCard}>
                 <View style={styles.termsHead}>
@@ -1992,6 +2089,24 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.5, marginTop: SPACING.xs,
   },
   charCountOk: { color: '#059669' },
+
+  rewardsCard: {
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.base,
+    borderWidth: 1, borderColor: '#a7f3d0', marginBottom: SPACING.md, gap: SPACING.sm,
+  },
+  rewardRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: 4 },
+  rewardTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  rewardSub: { fontSize: 12.5, color: COLORS.textSecondary, marginTop: 2 },
+  rewardCodeWrap: { borderTopWidth: 1, borderTopColor: COLORS.borderLight, paddingTop: SPACING.sm },
+  rewardCodeRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+  rewardInput: {
+    flex: 1, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md, paddingVertical: 10, fontSize: 15, color: COLORS.text, letterSpacing: 1,
+  },
+  rewardApply: { backgroundColor: COLORS.secondary, borderRadius: RADIUS.md, paddingHorizontal: SPACING.base, justifyContent: 'center', minWidth: 72, alignItems: 'center' },
+  rewardApplyText: { color: COLORS.white, fontWeight: '800', fontSize: 14 },
+  rewardMsg: { fontSize: 12.5, fontWeight: '700' },
+  rewardFine: { fontSize: 11, color: COLORS.textTertiary },
 
   bottomArea: {
     position: 'absolute', bottom: 0, left: 0, right: 0,

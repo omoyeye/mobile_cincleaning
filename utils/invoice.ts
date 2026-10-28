@@ -175,6 +175,16 @@ export function buildInvoice(
     });
   }
 
+  const pointsOff = Number(b.pointsDiscount) || 0;
+  if (pointsOff > 0) {
+    lines.push({
+      title: `Loyalty points (${Number(b.pointsRedeemed) || pointsOff * 10})`,
+      note: 'Points spent on this clean (no cash value)',
+      time: itemized ? '-' : undefined,
+      amount: `-${gbp(pointsOff)}`,
+    });
+  }
+
   const depositPercent = Math.min(100, Math.max(0, Number(policy.depositPercent) || 0));
   const property = b.propertyDetails
     ? [
