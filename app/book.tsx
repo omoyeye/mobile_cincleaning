@@ -35,6 +35,12 @@ const FULL_UK_POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 
 type Step = 'service' | 'details' | 'extras' | 'datetime' | 'address' | 'summary';
 const ALL_STEPS: Step[] = ['service', 'details', 'extras', 'datetime', 'address', 'summary'];
+
+const DEFAULT_PROPERTY: PropertyDetails = {
+  bedrooms: 1, bathrooms: 1, toilets: 0, livingRooms: 1, kitchens: 1,
+  receptionRooms: 0, utilityRooms: 0, clockRoomToilets: 0, carpetSteamCleaning: 0,
+  size: 'Studio', sqftRange: '1 - 1,200 Sq Ft',
+};
 const STEP_NAMES: Record<Step, string> = {
   service: 'Service',
   details: 'Your property',
@@ -132,11 +138,7 @@ export default function BookScreen() {
   const { service: serviceParam, reorder: reorderParam } = useLocalSearchParams<{ service?: string; reorder?: string }>();
   /** "Book again" from a past booking: copied in once the service is chosen (same fields the website's Reorder copies). */
   const pendingReorder = useRef<Booking | null>(null);
-  const [property, setProperty] = useState<PropertyDetails>({
-    bedrooms: 1, bathrooms: 1, toilets: 0, livingRooms: 1, kitchens: 1,
-    receptionRooms: 0, utilityRooms: 0, clockRoomToilets: 0, carpetSteamCleaning: 0,
-    size: 'Studio', sqftRange: '1 - 1,200 Sq Ft',
-  });
+  const [property, setProperty] = useState<PropertyDetails>(DEFAULT_PROPERTY);
   const [durationHours, setDurationHours] = useState(2);
   const [durationMinutes, setDurationMinutes] = useState(0);
   const [materials, setMaterials] = useState<MaterialsOption>('none');
@@ -538,6 +540,59 @@ export default function BookScreen() {
     }
   };
 
+  /** Clears everything picked so far and goes back to step 1. Account contact details stay. */
+  const resetBooking = useCallback(() => {
+    pendingReorder.current = null;
+    prefilledAddress.current = false;
+    setSelectedService(null);
+    setProperty(DEFAULT_PROPERTY);
+    setDurationHours(2);
+    setDurationMinutes(0);
+    setMaterials('none');
+    setSelectedExtras([]);
+    setDate('');
+    setTime('');
+    setFrequency('One-time');
+    setAddress({ line1: '', line2: '', city: '', postcode: '' });
+    setPostcodeResults([]);
+    setContactName(user?.name || '');
+    setContactEmail(user?.email || '');
+    setContactPhone(user?.phone || '');
+    setInstructions('');
+    setCommercialDetails('');
+    setNotifyIfMoreTimeNeeded(false);
+    setDiscountCode('');
+    setAppliedDiscount(null);
+    setDiscountError('');
+    setTipPercent(0);
+    setCustomTip('');
+    setUseCustomTip(false);
+    setSmsOptIn(false);
+    setTermsAccepted(false);
+    setPaymentChoice('deposit');
+    setUsePoints(true);
+    setRefCode('');
+    setRefMsg(null);
+    setStep('service');
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    showToast('Booking cleared. Start again whenever you are ready.', 'success');
+  }, [user]);
+
+  const confirmReset = () => {
+    const title = 'Start over?';
+    const body = 'This clears everything you have picked for this booking.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}
+
+${body}`)) resetBooking();
+      return;
+    }
+    Alert.alert(title, body, [
+      { text: 'Keep going', style: 'cancel' },
+      { text: 'Start over', style: 'destructive', onPress: resetBooking },
+    ]);
+  };
+
   // Mirrors the server: referral credit first, then whole pounds of points (10 points = £1).
   const breakdown = useMemo(() => {
     let total = baseBreakdown.total;
@@ -772,6 +827,18 @@ export default function BookScreen() {
           }]}
         />
       </View>
+      {selectedService ? (
+        <TouchableOpacity
+          onPress={confirmReset}
+          style={styles.resetBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Start over and clear this booking"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="refresh" size={14} color={COLORS.textSecondary} />
+          <Text style={styles.resetText}>Start over</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={{ flex: 1 }}>
         <KeyboardAwareScrollView
@@ -1851,6 +1918,8 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.lg, borderRadius: 2, overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: 2 },
+  resetBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end', marginTop: SPACING.sm, marginRight: SPACING.lg },
+  resetText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
   content: { paddingBottom: 160 },
   stepBody: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg },
   stepTitle: { fontSize: 22, fontWeight: '700', color: COLORS.text },
