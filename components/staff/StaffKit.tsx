@@ -3,6 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, type ViewStyle, type S
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking, DayAvailability, Staff } from '../../types';
+import { liveState } from '../../utils/live';
+import { LiveBadge, LiveRing } from '../LiveBadge';
+import { NotificationBell } from '../NotificationBell';
 import { PhotoBackdrop, PressableScale, Shine } from '../Motion';
 import { servicePhoto } from '../media';
 import { formatHoursMinutes } from '../../utils/duration';
@@ -117,10 +120,14 @@ export function ScreenHeader({ title, subtitle, right, eyebrow }: { title: strin
   );
 }
 
-export function BrandBar() {
+/** Logo in the middle, notification bell in the top right corner. `padded` when the screen has no side padding. */
+export function BrandBar({ padded = false }: { padded?: boolean }) {
   return (
-    <View style={kit.brandBar}>
+    <View style={[kit.brandBar, padded && { paddingHorizontal: SPACING.lg }]}>
       <Image source={require('../../assets/brand-logo.png')} style={kit.brandLogo} resizeMode="contain" />
+      <View style={[kit.brandBell, padded && { right: SPACING.lg }]}>
+        <NotificationBell />
+      </View>
     </View>
   );
 }
@@ -224,8 +231,9 @@ export function JobCard({
 }) {
   const hours = bookedHours(booking);
   const completed = booking.status === 'Completed';
+  const live = liveState(booking);
   return (
-    <PressableScale style={kit.job} onPress={onPress} accessibilityRole="button">
+    <PressableScale style={[kit.job, live && kit.jobLive]} onPress={onPress} accessibilityRole="button">
       <View style={[kit.jobTime, completed && kit.jobTimeDone]}>
         <Text style={[kit.jobTimeStart, completed && { color: COLORS.status.completed }]}>{booking.time || '--:--'}</Text>
         <Text style={kit.jobTimeEnd}>to {endTime(booking.time, hours)}</Text>
@@ -236,7 +244,7 @@ export function JobCard({
           <Text style={kit.jobName} numberOfLines={1}>
             {booking.contact?.name || 'Client'}
           </Text>
-          <StatusBadge status={booking.status} />
+          {live ? <LiveBadge state={live} /> : <StatusBadge status={booking.status} />}
         </View>
         <Text style={kit.jobService} numberOfLines={1}>
           {String(booking.serviceType || '').replace(/_/g, ' ')}
@@ -253,6 +261,7 @@ export function JobCard({
           {actions ? <View style={kit.jobActions}>{actions}</View> : null}
         </View>
       </View>
+      {live ? <LiveRing /> : null}
     </PressableScale>
   );
 }
@@ -266,6 +275,7 @@ export function IconAction({ icon, onPress, label }: { icon: keyof typeof Ionico
 }
 
 export function NextJobCard({ booking, onPress }: { booking: Booking; onPress: () => void }) {
+  const live = liveState(booking);
   return (
     <PressableScale style={kit.nextShadow} onPress={onPress} accessibilityRole="button" scaleTo={0.98}>
      <PhotoBackdrop
@@ -275,6 +285,8 @@ export function NextJobCard({ booking, onPress }: { booking: Booking; onPress: (
       locations={[0, 0.5, 1]}
      >
       <Shine />
+      {live ? <LiveRing radius={RADIUS.xl} color={COLORS.secondaryLight} /> : null}
+      {live ? <LiveBadge state={live} onDark style={{ marginBottom: SPACING.sm }} /> : null}
       <Text style={kit.nextEyebrow}>Next job · {friendlyDay(String(booking.date).slice(0, 10))}</Text>
       <Text style={kit.nextTime}>{booking.time || '--:--'}</Text>
       <Text style={kit.nextName} numberOfLines={1}>
@@ -300,7 +312,8 @@ export const kit = StyleSheet.create({
   eyebrow: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 2 },
   title: { fontSize: 26, fontWeight: '700', color: COLORS.text, letterSpacing: -0.4 },
   subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
-  brandBar: { alignItems: 'center', paddingTop: SPACING.xs },
+  brandBar: { alignItems: 'center', justifyContent: 'center', paddingTop: SPACING.xs, minHeight: 46 },
+  brandBell: { position: 'absolute', right: 0, top: SPACING.xs },
   brandLogo: { width: 110, height: 34 },
 
   card: {
@@ -348,6 +361,7 @@ export const kit = StyleSheet.create({
   stepLabelActive: { color: COLORS.primary, fontWeight: '700' },
   stepLabelDone: { color: COLORS.textSecondary },
 
+  jobLive: { borderColor: COLORS.secondary + '66', backgroundColor: COLORS.secondary + '06' },
   job: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,

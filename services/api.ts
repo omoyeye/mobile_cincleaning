@@ -21,6 +21,8 @@ import type {
   StaffHoliday,
   StaffHolidayYear,
   ReferralSummary,
+  QaJob,
+  QaCheck,
 } from '../types';
 
 export { getToken, setToken, clearToken };
@@ -289,6 +291,7 @@ export const staffApi = {
     earlyClockOutReason?: string;
     location?: { lat: number; lng: number };
     signature?: string;
+    checklist?: { task: string; done: boolean }[];
   }) =>
     request(`/api/bookings/${bookingId}/complete`, {
       method: 'PATCH',
@@ -408,6 +411,28 @@ export const staffApi = {
     }),
   markDirectMessagesRead: () =>
     request('/api/direct-messages/read', { method: 'PUT' }),
+};
+
+// ─── Quality checks (supervisors) ───────────────────
+export const qaApi = {
+  jobs: () => request<QaJob[]>('/api/qa/jobs'),
+  job: (bookingId: number) => request<QaJob>(`/api/qa/jobs/${bookingId}`),
+  assess: (
+    staffId: number,
+    body: {
+      bookingId: number;
+      rating: number;
+      punctuality?: number | null;
+      quality?: number | null;
+      professionalism?: number | null;
+      remark: string;
+      checklist: QaCheck[];
+    },
+  ) =>
+    request<{ id: number }>(`/api/staff/${staffId}/assessments`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // ─── Maps ───────────────────────────────────────────

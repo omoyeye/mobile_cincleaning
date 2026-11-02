@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +29,7 @@ import { EmptyState, findMe } from '../components/staff/StaffKit';
 import { RangeCalendar, countHolidayDays, holidayRange, pluralDays } from '../components/staff/HolidayKit';
 import { formatHoursMinutes } from '../utils/duration';
 import type { StaffHoliday, StaffHolidayYear } from '../types';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 type FormState = { id: number | null; startDate: string; endDate: string; halfDay: boolean; note: string };
 
@@ -322,7 +322,7 @@ export default function HolidayScreen() {
 
       {/* Book / change sheet */}
       <Modal visible={!!form} transparent animationType="slide" onRequestClose={() => setForm(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
+        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrap}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !saving && setForm(null)} />
           {form ? (
             <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, SPACING.base) }]}>

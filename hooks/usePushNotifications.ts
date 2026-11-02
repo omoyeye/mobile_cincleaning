@@ -83,6 +83,10 @@ export function usePushNotifications() {
       const jobTypes = ['job_prompt', 'job_assigned', 'job_update'];
       if (data.type === 'chat_message' && data.bookingId) {
         router.push(`/chat/${data.bookingId}`);
+      } else if (data.type === 'direct_message' && isStaff) {
+        router.push('/(staff)/inbox?tab=office');
+      } else if (data.type === 'assessment' && isStaff) {
+        router.push('/performance');
       } else if (data.bookingId && (jobTypes.includes(String(data.type)) || isStaff)) {
         router.push(`/job/${data.bookingId}`);
       } else if (data.bookingId) {
@@ -90,9 +94,7 @@ export function usePushNotifications() {
       } else if (data.type === 'invoice') {
         router.push(isStaff ? '/(staff)/earnings' : '/invoices');
       } else {
-        const role = user?.role;
-        if (role === 'staff') router.push('/(staff)');
-        else router.push('/(customer)/notifications');
+        router.push('/notifications');
       }
     });
 

@@ -10,10 +10,10 @@ import {
   ActivityIndicator,
   Platform,
   Animated,
-  KeyboardAvoidingView,
   Switch,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView, KeyboardToolbar, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { goBack } from '../utils/navigation';
@@ -117,7 +117,7 @@ export default function BookScreen() {
   const { user } = useAuth();
   // Keeps the price bar clear of the phone's gesture bar or 3-button nav.
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const progress = useRef(new Animated.Value(0)).current;
   const drawerAnim = useRef(new Animated.Value(0)).current;
 
@@ -773,9 +773,10 @@ export default function BookScreen() {
         />
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView
+      <View style={{ flex: 1 }}>
+        <KeyboardAwareScrollView
           ref={scrollRef}
+          bottomOffset={32}
           contentContainerStyle={[styles.content, { paddingBottom: 160 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -1681,8 +1682,8 @@ export default function BookScreen() {
               )}
             </View>
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
+      </View>
 
       {/* Bottom area: expandable drawer + price + button */}
       <View style={styles.bottomArea}>
@@ -1767,6 +1768,7 @@ export default function BookScreen() {
           )}
         </View>
       </View>
+      <KeyboardToolbar />
     </SafeAreaView>
   );
 }

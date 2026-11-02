@@ -135,6 +135,9 @@ export default function StaffProfileScreen() {
     {
       title: 'Work',
       items: [
+        ...(['supervisor', 'manager'].includes(String(staff?.role || '').toLowerCase())
+          ? [{ icon: 'clipboard-outline', label: 'Quality checks', sub: 'Assess finished jobs against their task list', onPress: () => router.push('/qa') } as MenuItem]
+          : []),
         ...(staff?.contractType === 'contracted'
           ? [{ icon: 'sunny-outline', label: 'Holiday', sub: 'Book paid holiday and see what is left', onPress: () => router.push('/holiday') } as MenuItem]
           : []),

@@ -143,7 +143,7 @@ export default function StaffSchedule() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <BrandBar />
+        <BrandBar padded />
         <StatsSkeleton />
         <ListSkeleton count={3} type="card" />
       </SafeAreaView>

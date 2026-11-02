@@ -10,7 +10,7 @@ import { useHaptic } from '../../hooks/useHaptic';
 import { AnimatedListItem } from '../../components/AnimatedListItem';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import type { Booking } from '../../types';
-import { ScreenHeader, BookingCard, FilterPills, EmptyState, isUpcoming } from '../../components/ClientKit';
+import { ScreenHeader, TopBar, BookingCard, FilterPills, EmptyState, isUpcoming } from '../../components/ClientKit';
 import { BrandRefresh } from '../../components/BrandRefresh';
 import { usePullRefresh } from '../../hooks/usePullRefresh';
 
@@ -59,6 +59,7 @@ export default function BookingsScreen() {
 
   const header = (
     <View style={styles.headerWrap}>
+      <TopBar />
       <ScreenHeader
         title="My bookings"
         subtitle={groups.upcoming.length ? `${groups.upcoming.length} coming up` : 'All your cleans in one place'}

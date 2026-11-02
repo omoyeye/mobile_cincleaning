@@ -37,6 +37,9 @@ import { addBookingToCalendar, prepChecklistFor } from '../../utils/clientPortal
 import { formatHoursMinutes } from '../../utils/duration';
 import { BrandRefresh } from '../../components/BrandRefresh';
 import { usePullRefresh } from '../../hooks/usePullRefresh';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { liveState } from '../../utils/live';
+import { LiveBadge, LiveRing } from '../../components/LiveBadge';
 
 /** Where the booking is on its journey, for the step tracker at the top. */
 function journeyStep(b: Booking, enRouteAt: string | null, arrived: boolean): number {
@@ -286,7 +289,8 @@ export default function BookingDetailScreen() {
   const isStaffRole = user?.role === 'staff';
   const canCancel = booking.status === 'Pending' || booking.status === 'Confirmed';
   const canReschedule = canCancel && hoursUntil(booking.date, booking.time) >= RESCHEDULE_NOTICE_HOURS;
-  const canRate = booking.status === 'Completed' && !booking.rating;
+  // Only the client rates their clean; cleaners never see the rating form.
+  const canRate = !isStaffRole && booking.status === 'Completed' && !booking.rating;
   const hasCleaner = !!booking.assignedStaffId || !!booking.assignedStaffIds?.length;
   const canChat = booking.status !== 'Cancelled' && !booking.chatClosedByAdmin && (isStaffRole || hasCleaner);
   const isStaff = isStaffRole;
@@ -298,6 +302,7 @@ export default function BookingDetailScreen() {
   const kmAway = cleanerLoc && jobCoords ? distanceKm(cleanerLoc, jobCoords) : null;
   const seenAgo = minutesAgo(cleanerLoc?.at);
   const arrived = kmAway != null && kmAway < 0.2;
+  const live = liveState({ ...booking, enRouteAt });
 
   const ymd = String(booking.date).slice(0, 10);
   const longDate = (() => {
@@ -332,7 +337,8 @@ export default function BookingDetailScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
+        bottomOffset={40}
         contentContainerStyle={styles.scroll}
         refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
@@ -343,8 +349,9 @@ export default function BookingDetailScreen() {
             <Photo source={servicePhoto(booking.serviceType)} style={[styles.heroPhoto, cancelled && { opacity: 0.5 }]} contentFit="cover" transition={300} />
             <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.9)', COLORS.surface]} locations={[0.35, 0.85, 1]} style={StyleSheet.absoluteFill} />
           </View>
+          {live ? <LiveRing radius={RADIUS.xl} /> : null}
           <View style={styles.heroTop}>
-            <StatusBadge status={booking.status} />
+            {live ? <LiveBadge state={live} /> : <StatusBadge status={booking.status} />}
             {isStaff ? (
               me && jobPay(booking, me.hourlyRate).pay > 0 ? (
                 <Text style={[styles.heroPrice, styles.heroPay]}>{money(jobPay(booking, me.hourlyRate).pay)} your pay</Text>
@@ -531,7 +538,7 @@ export default function BookingDetailScreen() {
           <View style={styles.card}>
             <View style={styles.cardIconRow}>
               <Ionicons name="star" size={18} color={COLORS.accentGold} />
-              <Text style={styles.cardLabel}>Your Review</Text>
+              <Text style={styles.cardLabel}>{isStaff ? "Client's review" : 'Your Review'}</Text>
             </View>
             <View style={styles.starsRow}>
               {[1, 2, 3, 4, 5].map((s) => (
@@ -609,8 +616,8 @@ export default function BookingDetailScreen() {
               </Text>
             </TouchableOpacity>
           )}
-          {canChat && hoursUntil(booking.date, booking.time) > 1 / 6 ? (
-            <Text style={styles.rescheduleHint}>Chat opens 10 minutes before the start time.</Text>
+          {canChat && !live && !lateNotices.length && hoursUntil(booking.date, booking.time) > 1 / 6 ? (
+            <Text style={styles.rescheduleHint}>Chat opens 10 minutes before the start time, or as soon as your cleaner sets off.</Text>
           ) : null}
 
           {isStaff && (booking.status === 'Pending' || booking.status === 'Confirmed' || booking.status === 'In Progress') && !booking.workCompletion && (
@@ -784,7 +791,7 @@ export default function BookingDetailScreen() {
         </View>
 
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

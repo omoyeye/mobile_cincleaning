@@ -301,7 +301,7 @@ export default function RotaScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <BrandBar />
+        <BrandBar padded />
         <ListSkeleton count={6} />
       </SafeAreaView>
     );

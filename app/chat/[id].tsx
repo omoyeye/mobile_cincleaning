@@ -6,7 +6,6 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -14,12 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUnread } from '../../contexts/UnreadContext';
 import { bookingsApi } from '../../services/api';
 import { useToast } from '../../components/Toast';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { friendlyDay, serviceLabel } from '../../components/ClientKit';
 import { goBack } from '../../utils/navigation';
 import type { Booking, ChatMessage } from '../../types';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 const POLL_INTERVAL = 8000;
 
@@ -59,6 +60,12 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const { markChatRead } = useUnread();
+
+  // Reading the chat clears its badge under Messages.
+  useEffect(() => {
+    if (booking) markChatRead(booking.bookingId || String(booking.id));
+  }, [booking, messages.length, markChatRead]);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -117,7 +124,7 @@ export default function ChatScreen() {
   const locked = closed || !canChatNow;
   const lockedText = closed
     ? 'This chat was closed by our team after the clean.'
-    : 'Chat opens 10 minutes before the start time, once a cleaner is assigned.';
+    : 'Chat opens 10 minutes before the start time, or as soon as the cleaner sets off.';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -147,7 +154,7 @@ export default function ChatScreen() {
         ) : null}
       </View>
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={COLORS.primary} />

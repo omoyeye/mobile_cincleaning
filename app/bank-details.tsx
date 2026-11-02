@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   Alert,
@@ -17,6 +16,7 @@ import { goBack } from '../utils/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { staffApi } from '../services/api';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { KeyboardAwareScrollView, KeyboardToolbar } from 'react-native-keyboard-controller';
 
 export default function BankDetailsScreen() {
   const router = useRouter();
@@ -92,7 +92,8 @@ export default function BankDetailsScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView
+          bottomOffset={40} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.infoCard}>
           <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.secondary} />
           <Text style={styles.infoText}>
@@ -153,7 +154,8 @@ export default function BankDetailsScreen() {
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
+      <KeyboardToolbar />
     </SafeAreaView>
   );
 }

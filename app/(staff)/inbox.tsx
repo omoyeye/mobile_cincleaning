@@ -8,81 +8,33 @@ import {
   ActivityIndicator,
   Image,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { staffApi } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
+import { useUnread } from '../../contexts/UnreadContext';
+import { ChatThreadList } from '../../components/ChatThreads';
 import { COLORS, SPACING, RADIUS } from '../../constants/config';
 import { BrandBar, ScreenHeader } from '../../components/staff/StaffKit';
-import type { Booking, Notification, DirectMessage } from '../../types';
-import { alertTarget } from '../../utils/alerts';
+import type { DirectMessage } from '../../types';
 import { BrandRefresh } from '../../components/BrandRefresh';
 import { usePullRefresh } from '../../hooks/usePullRefresh';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
-type InboxTab = 'alerts' | 'admin';
+type InboxTab = 'clients' | 'office';
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function getTypeIcon(type: string): keyof typeof Ionicons.glyphMap {
-  switch (type) {
-    case 'booking_update': return 'calendar-outline';
-    case 'booking_assigned': return 'calendar-outline';
-    case 'booking_cancelled': return 'close-circle-outline';
-    case 'system': return 'information-circle-outline';
-    case 'invoice': return 'document-text-outline';
-    case 'chat_message': return 'chatbubble-outline';
-    case 'promo': return 'gift-outline';
-    case 'payment': return 'card-outline';
-    default: return 'notifications-outline';
-  }
-}
-
-function getTypeColor(type: string) {
-  switch (type) {
-    case 'booking_update': return COLORS.primary;
-    case 'booking_assigned': return COLORS.primary;
-    case 'booking_cancelled': return '#ef4444';
-    case 'system': return '#6366f1';
-    case 'invoice': return '#0891b2';
-    case 'chat_message': return '#6366f1';
-    case 'promo': return '#f59e0b';
-    case 'payment': return '#22c55e';
-    default: return COLORS.textSecondary;
-  }
-}
-
+/** Messages tab: client chats for each job and the office chat. Alerts ring the bell in the top bar. */
 export default function InboxScreen() {
-  const router = useRouter();
-  const { user } = useAuth();
-  const [tab, setTab] = useState<InboxTab>('alerts');
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [jobs, setJobs] = useState<Booking[]>([]);
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<InboxTab>(params.tab === 'office' ? 'office' : 'clients');
+  const { chatUnreadByRef, markOfficeRead } = useUnread();
+  const { refreshing, onRefresh } = usePullRefresh(() => fetchAdminMessages());
 
   useEffect(() => {
-    staffApi.getBookings().then(setJobs).catch(() => {});
-  }, []);
-  const [loading, setLoading] = useState(true);
-  const { refreshing, onRefresh } = usePullRefresh(async () => {
-    if (tab === 'alerts') {
-      await fetchNotifications();
-    } else {
-      await fetchAdminMessages();
-    }
-  });
+    if (params.tab === 'office') setTab('office');
+  }, [params.tab]);
 
   const [adminMessages, setAdminMessages] = useState<DirectMessage[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -90,14 +42,6 @@ export default function InboxScreen() {
   const [adminSending, setAdminSending] = useState(false);
   const adminRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const flatListRef = useRef<FlatList>(null);
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const data = await staffApi.getNotifications();
-      setNotifications(data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
-    } catch {}
-    setLoading(false);
-  }, []);
 
   const fetchAdminMessages = useCallback(async () => {
     try {
@@ -109,11 +53,20 @@ export default function InboxScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+  // Office unread count for the tab badge, before the office chat is opened.
+  const [officeUnread, setOfficeUnread] = useState(0);
+  useEffect(() => {
+    staffApi
+      .getDirectMessages()
+      .then((msgs) => setOfficeUnread((Array.isArray(msgs) ? msgs : []).filter((m) => m.senderRole === 'admin' && !m.isRead).length))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    if (tab === 'admin') {
+    if (tab === 'office') {
       setAdminLoading(true);
+      setOfficeUnread(0);
+      markOfficeRead();
       fetchAdminMessages().finally(() => setAdminLoading(false));
       adminRefreshRef.current = setInterval(fetchAdminMessages, 15000);
     }
@@ -124,17 +77,6 @@ export default function InboxScreen() {
       }
     };
   }, [tab, fetchAdminMessages]);
-
-
-  const markRead = async (id: number) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
-    try { await staffApi.markNotificationRead(id); } catch {}
-  };
-
-  const handleDelete = async (id: number) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    try { await staffApi.deleteNotification(id); } catch {}
-  };
 
   const sendAdminMessage = async () => {
     const text = adminInput.trim();
@@ -149,111 +91,54 @@ export default function InboxScreen() {
     setAdminSending(false);
   };
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
-  const adminUnread = adminMessages.filter((m) => m.senderRole === 'admin' && !m.isRead).length;
+  const clientUnread = Object.values(chatUnreadByRef).reduce((a, n) => a + n, 0);
   const displayMessages = [...adminMessages].reverse();
 
-  if (loading && tab === 'alerts') {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
+  const tabs = (
+    <View style={styles.tabRow}>
+      <TouchableOpacity
+        style={[styles.tabBtn, tab === 'clients' && styles.tabBtnActive]}
+        onPress={() => setTab('clients')}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: tab === 'clients' }}
+      >
+        <Ionicons name="people-outline" size={16} color={tab === 'clients' ? COLORS.primary : COLORS.textTertiary} />
+        <Text style={[styles.tabText, tab === 'clients' && styles.tabTextActive]}>Clients</Text>
+        {clientUnread > 0 && (
+          <View style={styles.tabBadge}><Text style={styles.tabBadgeText}>{clientUnread}</Text></View>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.tabBtn, tab === 'office' && styles.tabBtnActive]}
+        onPress={() => setTab('office')}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: tab === 'office' }}
+      >
+        <Ionicons name="chatbubbles-outline" size={16} color={tab === 'office' ? COLORS.primary : COLORS.textTertiary} />
+        <Text style={[styles.tabText, tab === 'office' && styles.tabTextActive]}>Office</Text>
+        {officeUnread > 0 && (
+          <View style={[styles.tabBadge, { backgroundColor: COLORS.secondary }]}>
+            <Text style={styles.tabBadgeText}>{officeUnread}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <BrandBar />
+      <BrandBar padded />
       <View style={{ paddingHorizontal: SPACING.lg }}>
-        <ScreenHeader title="Inbox" subtitle="Alerts, client chats and messages from the office." />
+        <ScreenHeader title="Messages" subtitle="Chat with your clients and the office." />
       </View>
+      {tabs}
 
-      <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'alerts' && styles.tabBtnActive]}
-          onPress={() => setTab('alerts')}
-        >
-          <Ionicons name="notifications-outline" size={16} color={tab === 'alerts' ? COLORS.primary : COLORS.textTertiary} />
-          <Text style={[styles.tabText, tab === 'alerts' && styles.tabTextActive]}>Alerts</Text>
-          {unreadCount > 0 && (
-            <View style={styles.tabBadge}><Text style={styles.tabBadgeText}>{unreadCount}</Text></View>
-          )}
-        </TouchableOpacity>
-        {/* Client chats (website: Inbox > Chats) live on their own screen. */}
-        <TouchableOpacity style={styles.tabBtn} onPress={() => router.push('/messages')} accessibilityLabel="Client chats">
-          <Ionicons name="people-outline" size={16} color={COLORS.textTertiary} />
-          <Text style={styles.tabText}>Clients</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'admin' && styles.tabBtnActive]}
-          onPress={() => setTab('admin')}
-        >
-          <Ionicons name="chatbubbles-outline" size={16} color={tab === 'admin' ? COLORS.primary : COLORS.textTertiary} />
-          <Text style={[styles.tabText, tab === 'admin' && styles.tabTextActive]}>Office</Text>
-          {adminUnread > 0 && (
-            <View style={[styles.tabBadge, { backgroundColor: COLORS.secondary }]}>
-              <Text style={styles.tabBadgeText}>{adminUnread}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {tab === 'alerts' ? (
-        <FlatList
-          data={notifications}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="mail-open-outline" size={48} color={COLORS.textTertiary} />
-              <Text style={styles.emptyText}>Your inbox is clear</Text>
-            </View>
-          }
-          renderItem={({ item }) => {
-            const iconColor = getTypeColor(item.type);
-            return (
-              <TouchableOpacity
-                style={[styles.card, !item.isRead && styles.cardUnread]}
-                activeOpacity={0.7}
-                onPress={() => {
-                  markRead(item.id);
-                  const target = alertTarget(item, jobs, 'staff');
-                  if (target) router.push(target as any);
-                }}
-              >
-                <View style={styles.cardTop}>
-                  <View style={styles.cardTitleRow}>
-                    <View style={[styles.iconWrap, { backgroundColor: iconColor + '15' }]}>
-                      <Ionicons name={getTypeIcon(item.type)} size={16} color={iconColor} />
-                    </View>
-                    <Text style={[styles.cardTitle, !item.isRead && styles.cardTitleBold]} numberOfLines={1}>
-                      {item.type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                    </Text>
-                  </View>
-                  <Text style={styles.cardTime}>{timeAgo(item.createdAt)}</Text>
-                </View>
-                <Text style={styles.cardMsg} numberOfLines={2}>{item.message}</Text>
-                <View style={styles.cardActions}>
-                  <View />
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => handleDelete(item.id)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="trash-outline" size={16} color={COLORS.textTertiary} />
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            );
-          }}
-        />
+      {tab === 'clients' ? (
+        <ChatThreadList />
       ) : (
         <KeyboardAvoidingView
           style={styles.chatContainer}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={100}
+          behavior="padding"
         >
           {adminLoading && adminMessages.length === 0 ? (
             <View style={styles.chatLoader}>

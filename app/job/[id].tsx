@@ -30,6 +30,7 @@ import { startLiveTracking, stopLiveTracking, isTrackingJob } from '../../servic
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BrandRefresh } from '../../components/BrandRefresh';
 import { usePullRefresh } from '../../hooks/usePullRefresh';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 type Phase = 'pre' | 'clocked_in' | 'completing' | 'done';
 type JobPhoto = { uri: string; width?: number; height?: number };
@@ -344,6 +345,8 @@ export default function JobScreen() {
         location: location || undefined,
         signature: signature || undefined,
         photos: allPhotos.length > 0 ? allPhotos : undefined,
+        // What was ticked, so supervisors can check the work against it.
+        checklist,
       });
       setPhase('done');
       AsyncStorage.removeItem(progressKey(bookingId)).catch(() => {});
@@ -387,7 +390,8 @@ export default function JobScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
+        bottomOffset={40}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
@@ -767,7 +771,7 @@ export default function JobScreen() {
         )}
 
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

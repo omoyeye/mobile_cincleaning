@@ -103,6 +103,8 @@ export interface Booking {
   pointsDiscount?: number | string | null;
   /** ISO time the cleaner tapped "Start travel". */
   enRouteAt?: string | null;
+  /** ISO time the cleaner clocked in on site. */
+  arrivedAt?: string | null;
   depositTermsAcceptedAt?: string | null;
   shortNoticeCancelFeeConsentedAt?: string | null;
   paymentFeeEvidence?: { items?: PaymentEvidenceItem[] } | null;
@@ -453,7 +455,40 @@ export interface StaffPerformance {
     quality: number | null;
     professionalism: number | null;
     remark: string;
+    checklist?: QaCheck[] | null;
     createdAt: string | null;
   }[];
   recentJobs: StaffPerformanceJob[];
+}
+
+/** One task in a supervisor's field quality check. */
+export interface QaCheck {
+  task: string;
+  result: 'pass' | 'fail' | 'na';
+  note?: string;
+}
+
+/** A finished job a supervisor can assess in the field against its task list. */
+export interface QaJob {
+  id: number;
+  ref: string | null;
+  date: string;
+  time: string;
+  serviceType: string;
+  status: string;
+  clientName: string;
+  address: string;
+  finishedAt: string | null;
+  cleanerNotes: string | null;
+  cleanerIssues: string | null;
+  photos: string[];
+  /** What the cleaner ticked (done is null when their app did not send it). */
+  checklist: { task: string; done: boolean | null }[];
+  cleaners: {
+    id: number;
+    name: string;
+    imageUrl: string | null;
+    assessment: { id: number; rating: number; assessorName: string; remark: string; checklist: QaCheck[] | null; createdAt: string | null } | null;
+  }[];
+  checked: boolean;
 }

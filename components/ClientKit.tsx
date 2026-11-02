@@ -4,6 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS } from '../constants/config';
 import { StatusBadge, localYmd, friendlyDay } from './staff/StaffKit';
 import type { Booking } from '../types';
+import { liveState } from '../utils/live';
+import { LiveBadge, LiveRing } from './LiveBadge';
+import { NotificationBell } from './NotificationBell';
 import { Image as Photo } from 'expo-image';
 import { PhotoBackdrop, PressableScale, PulseDot, Shine } from './Motion';
 import { servicePhoto } from './media';
@@ -56,12 +59,15 @@ function dateParts(ymd: string): { day: string; month: string; weekday: string }
 
 /* ───────────── UI ───────────── */
 
-/** Logo on the left, optional action on the right. Used at the top of each tab. */
+/** Logo on the left; optional action and the notification bell on the right. Used at the top of each tab. */
 export function TopBar({ right }: { right?: React.ReactNode }) {
   return (
     <View style={ck.topBar}>
       <Image source={require('../assets/brand-logo.png')} style={ck.topLogo} resizeMode="contain" accessibilityLabel="CiN Cleaning" />
-      {right}
+      <View style={ck.topRight}>
+        {right}
+        <NotificationBell />
+      </View>
     </View>
   );
 }
@@ -90,8 +96,9 @@ export function BookingCard({ booking, onPress, style }: { booking: Booking; onP
   const cancelled = booking.status === 'Cancelled';
   const where = [booking.address?.line1, booking.address?.postcode].filter(Boolean).join(', ');
   const proof = paymentProofNeeded(booking);
+  const live = liveState(booking);
   return (
-    <PressableScale style={[ck.booking, style]} onPress={onPress} accessibilityRole="button">
+    <PressableScale style={[ck.booking, live && ck.bookingLive, style]} onPress={onPress} accessibilityRole="button">
       <View style={[ck.dateTile, done && ck.dateTileDone, cancelled && ck.dateTileCancelled]}>
         <Text style={[ck.dateMonth, done && { color: COLORS.status.completed }, cancelled && { color: COLORS.textTertiary }]}>{parts.month}</Text>
         <Text style={[ck.dateDay, done && { color: COLORS.status.completed }, cancelled && { color: COLORS.textTertiary }]}>{parts.day}</Text>
@@ -123,7 +130,7 @@ export function BookingCard({ booking, onPress, style }: { booking: Booking; onP
           </View>
         ) : null}
         <View style={ck.bookingFooter}>
-          <StatusBadge status={booking.status} />
+          {live ? <LiveBadge state={live} /> : <StatusBadge status={booking.status} />}
           <Text style={ck.price}>{money(booking.totalPrice)}</Text>
         </View>
         {proof.show ? (
@@ -133,6 +140,7 @@ export function BookingCard({ booking, onPress, style }: { booking: Booking; onP
           </View>
         ) : null}
       </View>
+      {live ? <LiveRing /> : null}
     </PressableScale>
   );
 }
@@ -140,7 +148,8 @@ export function BookingCard({ booking, onPress, style }: { booking: Booking; onP
 /** Big blue card for the next clean on the home tab. */
 export function NextCleanCard({ booking, onPress }: { booking: Booking; onPress: () => void }) {
   const ymd = bookingYmd(booking);
-  const onTheWay = !!booking.enRouteAt && booking.status !== 'Completed';
+  const live = liveState(booking);
+  const onTheWay = !!live;
   return (
     <PressableScale style={ck.nextShadow} onPress={onPress} accessibilityRole="button" scaleTo={0.98}>
      <PhotoBackdrop
@@ -150,12 +159,13 @@ export function NextCleanCard({ booking, onPress }: { booking: Booking; onPress:
       locations={[0, 0.5, 1]}
      >
       <Shine />
+      {live ? <LiveRing radius={RADIUS.xl} color={COLORS.secondaryLight} /> : null}
       <View style={ck.nextHead}>
         <Text style={ck.nextEyebrow}>Your next clean</Text>
         {onTheWay ? (
           <View style={ck.livePill}>
             <PulseDot color={COLORS.secondary} />
-            <Text style={ck.livePillText}>Cleaner on the way</Text>
+            <Text style={ck.livePillText}>{live === 'cleaning' ? 'Cleaning now' : 'Cleaner on the way'}</Text>
           </View>
         ) : (
           <View style={ck.nextStatus}>
@@ -340,9 +350,11 @@ const shadow = {
 export const ck = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: SPACING.xs, minHeight: 44 },
   topLogo: { width: 112, height: 40 },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   avatar: { backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: COLORS.white, fontWeight: '700' },
 
+  bookingLive: { borderColor: COLORS.secondary + '66', backgroundColor: COLORS.secondary + '06' },
   booking: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,

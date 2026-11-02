@@ -286,7 +286,19 @@ export default function PerformanceScreen() {
                   {a.punctuality ? <Text style={styles.chip}>Punctuality {a.punctuality}/5</Text> : null}
                   {a.quality ? <Text style={styles.chip}>Quality {a.quality}/5</Text> : null}
                   {a.professionalism ? <Text style={styles.chip}>Professionalism {a.professionalism}/5</Text> : null}
+                  {a.checklist?.length ? (
+                    <Text style={styles.chip}>
+                      Tasks {a.checklist.filter((c) => c.result === 'pass').length}/{a.checklist.filter((c) => c.result !== 'na').length} passed
+                    </Text>
+                  ) : null}
                 </View>
+                {a.checklist
+                  ?.filter((c) => c.result === 'fail')
+                  .map((c) => (
+                    <Text key={c.task} style={styles.failedTask}>
+                      ✕ {c.task}{c.note ? `: ${c.note}` : ''}
+                    </Text>
+                  ))}
                 <Text style={styles.quote}>{a.remark}</Text>
               </Card>
             ))
@@ -339,6 +351,7 @@ export default function PerformanceScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  failedTask: { fontSize: 13, color: COLORS.accent, marginTop: 4, lineHeight: 18 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.borderLight, alignItems: 'center', justifyContent: 'center' },

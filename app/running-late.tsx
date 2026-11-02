@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
@@ -20,6 +19,7 @@ import type { Booking, LateNotice } from '../types';
 import { addMinutesToHHMM, formatClock, isTodayYmd, isValidHHMM } from '../utils/tracking';
 import { BrandRefresh } from '../components/BrandRefresh';
 import { usePullRefresh } from '../hooks/usePullRefresh';
+import { KeyboardAwareScrollView, KeyboardToolbar } from 'react-native-keyboard-controller';
 
 const REASONS = [
   'Heavy traffic',
@@ -141,7 +141,9 @@ export default function RunningLateScreen() {
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       ) : (
-        <ScrollView
+        <>
+        <KeyboardAwareScrollView
+          bottomOffset={40}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
@@ -319,7 +321,9 @@ export default function RunningLateScreen() {
           )}
 
           <View style={{ height: 40 }} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
+        <KeyboardToolbar />
+        </>
       )}
     </SafeAreaView>
   );

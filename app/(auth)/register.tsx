@@ -5,9 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
@@ -24,6 +22,7 @@ import { PHOTOS } from '../../components/media';
 import { useHaptic } from '../../hooks/useHaptic';
 import { friendlyAuthError, isEmail, passwordStrength } from '../../utils/authForm';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView, KeyboardToolbar, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 
 type Field = 'name' | 'email' | 'phone' | 'password' | 'confirm' | 'terms' | 'age';
 
@@ -38,7 +37,7 @@ export default function RegisterScreen() {
   const router = useRouter();
   const haptic = useHaptic();
   const { register } = useAuth();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const emailRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
@@ -106,11 +105,8 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.flex}
-      >
-        <ScrollView
+        <KeyboardAwareScrollView
+          bottomOffset={32}
           ref={scrollRef}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
@@ -312,8 +308,8 @@ export default function RegisterScreen() {
               <Text style={styles.footerLink}> Sign in</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
+      <KeyboardToolbar />
     </SafeAreaView>
   );
 }

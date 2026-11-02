@@ -178,7 +178,7 @@ export default function EarningsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <BrandBar />
+        <BrandBar padded />
         <StatsSkeleton />
         <ListSkeleton count={4} />
       </SafeAreaView>

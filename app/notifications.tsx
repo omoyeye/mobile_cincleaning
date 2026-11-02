@@ -11,16 +11,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { customerApi } from '../../services/api';
-import { useToast } from '../../components/Toast';
-import { ListSkeleton } from '../../components/SkeletonLoader';
-import { useHaptic } from '../../hooks/useHaptic';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
-import type { Booking, Notification } from '../../types';
-import { ScreenHeader } from '../../components/ClientKit';
-import { alertTarget } from '../../utils/alerts';
-import { BrandRefresh } from '../../components/BrandRefresh';
-import { usePullRefresh } from '../../hooks/usePullRefresh';
+import { bookingsApi, customerApi } from '../services/api';
+import { useToast } from '../components/Toast';
+import { ListSkeleton } from '../components/SkeletonLoader';
+import { useHaptic } from '../hooks/useHaptic';
+import { COLORS, SPACING, RADIUS } from '../constants/config';
+import type { Booking, Notification } from '../types';
+import { ScreenHeader } from '../components/ClientKit';
+import { alertTarget } from '../utils/alerts';
+import { BrandRefresh } from '../components/BrandRefresh';
+import { usePullRefresh } from '../hooks/usePullRefresh';
+import { useAuth } from '../contexts/AuthContext';
+import { isMessageAlert, useUnread } from '../contexts/UnreadContext';
+import { goBack } from '../utils/navigation';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -60,27 +63,31 @@ function getAlertColor(type: string) {
   }
 }
 
-function getNavigationTarget(notification: Notification, bookings: Booking[]): { route: string } | null {
-  const route = alertTarget(notification, bookings, 'customer');
+function getNavigationTarget(notification: Notification, bookings: Booking[], role?: string): { route: string } | null {
+  const route = alertTarget(notification, bookings, role);
   return route ? { route } : null;
 }
 
+/** The bell: booking updates, payments, assignments and other alerts. Chat messages live under Messages. */
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { refresh: refreshUnread } = useUnread();
+  const role = user?.role;
   const { showToast } = useToast();
   const haptic = useHaptic();
   const [alerts, setAlerts] = useState<Notification[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
 
   useEffect(() => {
-    customerApi.getBookings().then(setBookings).catch(() => {});
+    bookingsApi.getAll().then(setBookings).catch(() => {});
   }, []);
   const [loading, setLoading] = useState(true);
   const { refreshing, onRefresh } = usePullRefresh(() => fetchAlerts());
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const data = await customerApi.getNotifications();
+      const data = (await customerApi.getNotifications()).filter((n) => !isMessageAlert(n));
       setAlerts(data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
     } catch {
       showToast('Could not load notifications', 'error');
@@ -94,6 +101,7 @@ export default function NotificationsScreen() {
   const markRead = async (id: number) => {
     setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, isRead: true } : a)));
     try { await customerApi.markNotificationRead(id); } catch {}
+    refreshUnread();
   };
 
   const markAllRead = async () => {
@@ -104,6 +112,7 @@ export default function NotificationsScreen() {
     try {
       await Promise.all(unread.map((a) => customerApi.markNotificationRead(a.id)));
       showToast('All notifications marked as read', 'success');
+      refreshUnread();
     } catch {
       showToast('Could not mark all as read', 'error');
     }
@@ -113,6 +122,7 @@ export default function NotificationsScreen() {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
     try {
       await customerApi.deleteNotification(id);
+      refreshUnread();
     } catch {
       showToast('Could not delete notification', 'error');
     }
@@ -120,7 +130,7 @@ export default function NotificationsScreen() {
 
   const handlePress = (item: Notification) => {
     if (!item.isRead) markRead(item.id);
-    const target = getNavigationTarget(item, bookings);
+    const target = getNavigationTarget(item, bookings, role);
     if (target) {
       router.push(target.route as any);
     }
@@ -128,9 +138,10 @@ export default function NotificationsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={styles.headerWrap}>
-          <ScreenHeader title="Alerts" subtitle="Updates about your bookings" />
+          <BackRow onBack={() => goBack(router)} />
+          <ScreenHeader title="Notifications" subtitle={role === 'staff' ? 'Updates about your jobs' : 'Updates about your bookings'} />
         </View>
         <ListSkeleton count={5} type="notification" />
       </SafeAreaView>
@@ -140,10 +151,11 @@ export default function NotificationsScreen() {
   const unreadCount = alerts.filter((a) => !a.isRead).length;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.headerWrap}>
+        <BackRow onBack={() => goBack(router)} />
         <ScreenHeader
-          title="Alerts"
+          title="Notifications"
           subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'You are all caught up'}
           right={
             unreadCount > 0 ? (
@@ -170,7 +182,7 @@ export default function NotificationsScreen() {
         }
         renderItem={({ item }) => {
           const iconColor = getAlertColor(item.type);
-          const target = getNavigationTarget(item, bookings);
+          const target = getNavigationTarget(item, bookings, role);
           return (
             <TouchableOpacity
               style={[styles.card, !item.isRead && styles.cardUnread]}
@@ -211,7 +223,16 @@ export default function NotificationsScreen() {
   );
 }
 
+function BackRow({ onBack }: { onBack: () => void }) {
+  return (
+    <TouchableOpacity onPress={onBack} style={styles.backBtn} accessibilityLabel="Back" hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+      <Ionicons name="chevron-back" size={22} color={COLORS.text} />
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.borderLight, alignItems: 'center', justifyContent: 'center', marginTop: SPACING.sm },
   safe: { flex: 1, backgroundColor: COLORS.background },
   header: {
     paddingHorizontal: SPACING.lg,

@@ -1,31 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/config';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { staffApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUnread } from '../../contexts/UnreadContext';
 
 export default function StaffLayout() {
   const { user, loading } = useAuth();
   // The phone's own bottom area (gesture bar or 3-button nav) varies by model, so size the tab bar from it.
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 8);
-  const [unread, setUnread] = useState(0);
-
-  const fetchUnread = useCallback(async () => {
-    if (!user) return;
-    try {
-      const notifs = await staffApi.getNotifications();
-      setUnread(notifs.filter((n) => !n.isRead).length);
-    } catch {}
-  }, [user]);
-
-  useEffect(() => {
-    fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
-    return () => clearInterval(interval);
-  }, [fetchUnread]);
+  // Chats and office messages; alerts ring the bell in the top bar instead.
+  const { messages: unread } = useUnread();
   // Signed out (or the session expired): back to the shared welcome page.
   if (!loading && !user) return <Redirect href="/welcome" />;
 
@@ -33,6 +19,8 @@ export default function StaffLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // The keyboard should cover the tab bar, not push it up over the form.
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textTertiary,
         tabBarStyle: {
@@ -72,9 +60,9 @@ export default function StaffLayout() {
       <Tabs.Screen
         name="inbox"
         options={{
-          title: 'Inbox',
+          title: 'Messages',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-outline" size={size} color={color} />
+            <Ionicons name="chatbubbles-outline" size={size} color={color} />
           ),
           tabBarBadge: unread > 0 ? unread : undefined,
           tabBarBadgeStyle: { backgroundColor: COLORS.accent, fontSize: 10 },
