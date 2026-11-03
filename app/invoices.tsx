@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { customerApi } from '../services/api';
 import { ListSkeleton } from '../components/SkeletonLoader';
-import { COLORS, SPACING, RADIUS, SITE_URL, SHADOW } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { EmptyState, FilterPills, money } from '../components/ClientKit';
 import { goBack } from '../utils/navigation';
 import type { CustomerInvoice } from '../types';
@@ -59,8 +59,12 @@ export default function InvoicesScreen() {
   }, [loading]);
 
   const pay = (inv: CustomerInvoice) => {
-    const url = inv.stripePaymentUrl || `${SITE_URL}/pay/invoice/${inv.id}`;
-    Linking.openURL(url);
+    // Coded link from the server; invoices without one are not set up for online payment yet.
+    if (!inv.stripePaymentUrl) {
+      Alert.alert('Not ready to pay online', 'This invoice is not set up for card payment yet. Please contact us and we will send you a payment link.');
+      return;
+    }
+    Linking.openURL(inv.stripePaymentUrl);
   };
 
   return (
