@@ -1,82 +1,37 @@
-import { Tabs, Redirect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../constants/config';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Redirect } from 'expo-router';
+import { Tabs } from 'expo-router/js-tabs';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUnread } from '../../contexts/UnreadContext';
+import { FloatingTabBar, type TabIcons } from '../../components/TabBar';
+import { BookFab } from '../../components/Fab';
+
+const ICONS: TabIcons = {
+  index: ['home-outline', 'home'],
+  bookings: ['calendar-outline', 'calendar'],
+  messages: ['chatbubbles-outline', 'chatbubbles'],
+  account: ['person-circle-outline', 'person-circle'],
+};
 
 export default function CustomerLayout() {
   const { user, loading } = useAuth();
-  // The phone's own bottom area (gesture bar or 3-button nav) varies by model, so size the tab bar from it.
-  const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 8);
-  // Chats and office messages; alerts ring the bell in the top bar instead.
+  // Chats with cleaners; alerts ring the bell in the top bar instead.
   const { messages: unread } = useUnread();
   // Signed out (or the session expired): back to the shared welcome page.
   if (!loading && !user) return <Redirect href="/welcome" />;
 
   return (
     <Tabs
+      tabBar={(props) => <FloatingTabBar {...props} icons={ICONS} fab={<BookFab />} />}
       screenOptions={{
         headerShown: false,
         // The keyboard should cover the tab bar, not push it up over the form.
         tabBarHideOnKeyboard: true,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textTertiary,
-        tabBarStyle: {
-          backgroundColor: COLORS.white,
-          borderTopWidth: 1,
-          borderTopColor: COLORS.borderLight,
-          paddingBottom: bottomPad,
-          paddingTop: 8,
-          height: 56 + bottomPad,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-        },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="bookings"
-        options={{
-          title: 'Bookings',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubbles-outline" size={size} color={color} />
-          ),
-          tabBarBadge: unread > 0 ? unread : undefined,
-          tabBarBadgeStyle: { backgroundColor: COLORS.accent, fontSize: 10 },
-        }}
-      />
-      <Tabs.Screen
-        name="account"
-        options={{
-          title: 'Account',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="bookings" options={{ title: 'Bookings' }} />
+      <Tabs.Screen name="messages" options={{ title: 'Messages', tabBarBadge: unread > 0 ? unread : undefined }} />
+      <Tabs.Screen name="account" options={{ title: 'Account' }} />
     </Tabs>
   );
 }

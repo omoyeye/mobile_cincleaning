@@ -16,7 +16,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from '../../contexts/AuthContext';
 import { authApi } from '../../services/api';
 import { getToken } from '../../services/tokenStorage';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import { AuthHero } from '../../components/AuthHero';
 import { AuthField, FormBanner } from '../../components/AuthField';
 import { PressableScale } from '../../components/Motion';
@@ -392,6 +392,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     gap: SPACING.md,
+    ...SHADOW.card,
   },
   forgotTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
   forgotSub: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 19, marginTop: -SPACING.sm },

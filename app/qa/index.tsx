@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { qaApi } from '../../services/api';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import { EmptyState, FilterPills, friendlyDay, serviceLabel } from '../../components/ClientKit';
 import { ListSkeleton } from '../../components/SkeletonLoader';
 import { BrandRefresh } from '../../components/BrandRefresh';
@@ -136,6 +136,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     marginBottom: SPACING.sm,
     gap: 4,
+    ...SHADOW.card,
   },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm },
   cardTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: COLORS.text },

@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { goBack } from '../utils/navigation';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { useBusinessContact } from '../hooks/useBusinessContact';
 
 const FAQ = [
@@ -169,6 +169,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   contactIcon: {
     width: 56,
@@ -215,6 +216,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   faqHeader: {
     flexDirection: 'row',

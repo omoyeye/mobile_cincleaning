@@ -17,7 +17,7 @@ import { goBack } from '../utils/navigation';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../services/api';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { KeyboardAwareScrollView, KeyboardToolbar } from 'react-native-keyboard-controller';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -415,6 +415,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     marginBottom: SPACING.md,
+    ...SHADOW.card,
   },
   fieldGroup: { marginBottom: SPACING.md },
   postcodeRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' },

@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { goBack } from '../utils/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { customerApi, staffApi } from '../services/api';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import type { Referral, ReferralSummary } from '../types';
 import { BrandRefresh } from '../components/BrandRefresh';
 import { usePullRefresh } from '../hooks/usePullRefresh';
@@ -255,6 +255,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   shareIconCircle: {
     width: 64,
@@ -319,6 +320,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   statNum: { fontSize: 20, fontWeight: '800', color: COLORS.primary },
   statLabel: { fontSize: 10, fontWeight: '600', color: COLORS.textTertiary, marginTop: 2 },
@@ -336,6 +338,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   refLeft: {},
   refName: { fontSize: 14, fontWeight: '600', color: COLORS.text },

@@ -14,7 +14,7 @@ import { goBack } from '../utils/navigation';
 import { staffApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { APP_NAME, COLORS, RADIUS, SPACING } from '../constants/config';
+import { APP_NAME, COLORS, RADIUS, SPACING, SHADOW } from '../constants/config';
 import type { Booking, LateNotice } from '../types';
 import { addMinutesToHHMM, formatClock, isTodayYmd, isValidHHMM } from '../utils/tracking';
 import { BrandRefresh } from '../components/BrandRefresh';
@@ -357,6 +357,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: SPACING.sm,
+    ...SHADOW.card,
   },
   jobCardActive: { borderColor: AMBER, backgroundColor: '#fffbeb', borderWidth: 2 },
   jobName: { fontSize: 15, fontWeight: '700', color: COLORS.text },

@@ -6,7 +6,7 @@ import { bookingsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnread } from '../contexts/UnreadContext';
 import { ListSkeleton } from './SkeletonLoader';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { EmptyState, friendlyDay, serviceLabel, bookingYmd } from './ClientKit';
 import { BrandRefresh } from './BrandRefresh';
 import { LiveBadge } from './LiveBadge';
@@ -170,6 +170,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border + '80',
     padding: SPACING.md,
     marginBottom: SPACING.sm,
+    ...SHADOW.card,
   },
   rowLive: { borderColor: COLORS.secondary + '80', backgroundColor: COLORS.secondary + '08' },
   icon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

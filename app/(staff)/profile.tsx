@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { staffApi, authApi } from '../../services/api';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import { BrandBar } from '../../components/staff/StaffKit';
 import type { Staff, Referral } from '../../types';
 import { BrandRefresh } from '../../components/BrandRefresh';
@@ -135,6 +135,7 @@ export default function StaffProfileScreen() {
     {
       title: 'Work',
       items: [
+        { icon: 'wallet-outline', label: 'Earnings and invoices', sub: 'Your pay, weekly invoice and history', onPress: () => router.push('/(staff)/earnings') },
         ...(['supervisor', 'manager'].includes(String(staff?.role || '').toLowerCase())
           ? [{ icon: 'clipboard-outline', label: 'Quality checks', sub: 'Assess finished jobs against their task list', onPress: () => router.push('/qa') } as MenuItem]
           : []),
@@ -259,6 +260,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   avatar: {
     width: 72,
@@ -316,6 +318,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     overflow: 'hidden',
+    ...SHADOW.card,
   },
   menuItem: {
     flexDirection: 'row',

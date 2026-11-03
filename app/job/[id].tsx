@@ -21,7 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
 import { staffApi, bookingsApi } from '../../services/api';
 import { useToast } from '../../components/Toast';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import { StatusBadge, StepTracker } from '../../components/staff/StaffKit';
 import type { Booking } from '../../types';
 import { formatClock, isTodayYmd } from '../../utils/tracking';
@@ -811,6 +811,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   cardRow: { flexDirection: 'row', gap: SPACING.xl },
   cardCol: { flex: 1 },
@@ -827,6 +828,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     gap: SPACING.sm,
+    ...SHADOW.card,
   },
   travelBtn: {
     flexDirection: 'row',
@@ -925,6 +927,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   summaryLabel: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
   summaryValue: { fontSize: 18, fontWeight: '800', color: COLORS.primary, fontVariant: ['tabular-nums'] },
@@ -995,6 +998,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     marginBottom: SPACING.lg,
+    ...SHADOW.card,
   },
   doneSummaryText: { fontSize: 15, fontWeight: '600', color: COLORS.text, textAlign: 'center' },
   doneNotes: { fontSize: 13, color: COLORS.textSecondary, marginTop: SPACING.sm, textAlign: 'center' },
@@ -1026,6 +1030,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   checklistHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
   checklistTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },

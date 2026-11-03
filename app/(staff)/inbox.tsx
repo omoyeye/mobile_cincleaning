@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { staffApi } from '../../services/api';
 import { useUnread } from '../../contexts/UnreadContext';
 import { ChatThreadList } from '../../components/ChatThreads';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import { BrandBar, ScreenHeader } from '../../components/staff/StaffKit';
 import type { DirectMessage } from '../../types';
 import { BrandRefresh } from '../../components/BrandRefresh';
@@ -261,6 +261,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   cardUnread: { backgroundColor: COLORS.primary + '06', borderColor: COLORS.primary + '20' },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },

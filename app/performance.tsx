@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { staffApi } from '../services/api';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { Card, EmptyState } from '../components/staff/StaffKit';
 import { FilterPills, money } from '../components/ClientKit';
 import { goBack } from '../utils/navigation';
@@ -370,6 +370,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border + '80',
     padding: SPACING.md,
+    ...SHADOW.card,
   },
   tileIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   tileValue: { fontSize: 22, fontWeight: '800', color: COLORS.text, letterSpacing: -0.3 },

@@ -24,7 +24,7 @@ import { useToast } from '../components/Toast';
 import { useHaptic } from '../hooks/useHaptic';
 import { BrandRefresh } from '../components/BrandRefresh';
 import { usePullRefresh } from '../hooks/usePullRefresh';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { EmptyState, findMe } from '../components/staff/StaffKit';
 import { RangeCalendar, countHolidayDays, holidayRange, pluralDays } from '../components/staff/HolidayKit';
 import { formatHoursMinutes } from '../utils/duration';
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   heroBtnText: { color: '#4338ca', fontWeight: '800', fontSize: 15 },
 
   tiles: { flexDirection: 'row', gap: SPACING.sm },
-  tile: { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderLight, paddingVertical: SPACING.md, alignItems: 'center', gap: 2 },
+  tile: { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderLight, paddingVertical: SPACING.md, alignItems: 'center', gap: 2, ...SHADOW.card },
   tileValue: { fontSize: 20, fontWeight: '800', color: COLORS.text },
   tileLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textTertiary },
 
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
   claimBody: { fontSize: 12.5, color: '#047857', marginTop: 2 },
 
   section: { fontSize: 13, fontWeight: '800', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: SPACING.sm },
-  item: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderLight, padding: SPACING.base },
+  item: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderLight, padding: SPACING.base, ...SHADOW.card },
   itemTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm },
   itemRange: { fontSize: 15, fontWeight: '700', color: COLORS.text, flex: 1 },
   badge: { borderRadius: RADIUS.full, paddingHorizontal: 10, paddingVertical: 3 },

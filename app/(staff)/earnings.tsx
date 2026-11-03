@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { goBack } from '../../utils/navigation';
 import { staffApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { ListSkeleton, StatsSkeleton } from '../../components/SkeletonLoader';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import { BrandBar, Card, EmptyState, ScreenHeader, SectionTitle, StatusBadge, findMe, jobPay, localWeekRange } from '../../components/staff/StaffKit';
 import type { Booking, ClaimableHoliday, ClaimableReferral, Staff, StaffInvoice } from '../../types';
 import { holidayRange, pluralDays } from '../../components/staff/HolidayKit';
@@ -178,7 +179,7 @@ export default function EarningsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <BrandBar padded />
+        <BrandBar padded onBack={() => goBack(router)} />
         <StatsSkeleton />
         <ListSkeleton count={4} />
       </SafeAreaView>
@@ -192,7 +193,7 @@ export default function EarningsScreen() {
         refreshControl={<BrandRefresh refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
-        <BrandBar />
+        <BrandBar onBack={() => goBack(router)} />
         <ScreenHeader
           title="Earnings"
           subtitle="Your pay and weekly invoices."
@@ -478,6 +479,7 @@ const styles = StyleSheet.create({
     gap: 4,
     borderWidth: 1,
     borderColor: COLORS.border + '80',
+    ...SHADOW.card,
   },
   statValue: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   statLabel: { fontSize: 11, color: COLORS.textSecondary },

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { customerApi } from '../services/api';
 import { ListSkeleton } from '../components/SkeletonLoader';
-import { COLORS, SPACING, RADIUS, SITE_URL } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SITE_URL, SHADOW } from '../constants/config';
 import { EmptyState, FilterPills, money } from '../components/ClientKit';
 import { goBack } from '../utils/navigation';
 import type { CustomerInvoice } from '../types';
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   retry: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.warningLight },
   retryText: { flex: 1, fontSize: 13, color: COLORS.text },
 
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border + '80', padding: SPACING.base, marginBottom: SPACING.sm },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border + '80', padding: SPACING.base, marginBottom: SPACING.sm, ...SHADOW.card },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   cardIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.primary + '12', alignItems: 'center', justifyContent: 'center' },
   number: { fontSize: 16, fontWeight: '700', color: COLORS.text },

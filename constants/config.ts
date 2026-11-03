@@ -16,14 +16,15 @@ export const COLORS = {
   accentGold: '#f5b731',
   secondary: '#059669',
   secondaryLight: '#34d399',
-  background: '#f7fafc',
+  // A touch darker than white so cards (white + soft shadow) stand out on it.
+  background: '#e8eef5',
   surface: '#ffffff',
-  surfaceAlt: '#eef5fa',
+  surfaceAlt: '#dde7f0',
   text: '#0c1f33',
   textSecondary: '#506a83',
   textTertiary: '#8da4b8',
   border: '#d5e3ef',
-  borderLight: '#eef5fa',
+  borderLight: '#e6edf4',
   error: '#e8443a',
   errorLight: '#fde8e7',
   warning: '#f5b731',
@@ -75,4 +76,32 @@ export const RADIUS = {
   xl: 20,
   xxl: 24,
   full: 9999,
+} as const;
+
+/** Shadows for things that sit on the background: cards, the tab bar, floating buttons. */
+export const SHADOW = {
+  /** Cards and list rows. */
+  card: {
+    shadowColor: '#0c1f33',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  /** Small chips, tiles and buttons. */
+  soft: {
+    shadowColor: '#0c1f33',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  /** Floating tab bar and hero cards. */
+  raised: {
+    shadowColor: '#0c1f33',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    elevation: 10,
+  },
 } as const;

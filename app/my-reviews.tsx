@@ -14,7 +14,7 @@ import { goBack } from '../utils/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { staffApi } from '../services/api';
 import { ListSkeleton } from '../components/SkeletonLoader';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { BrandRefresh } from '../components/BrandRefresh';
 import { usePullRefresh } from '../hooks/usePullRefresh';
 
@@ -160,6 +160,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   summaryLeft: { gap: 4 },
   summaryRating: { fontSize: 36, fontWeight: '800', color: COLORS.text },
@@ -189,6 +190,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   reviewHeader: {
     flexDirection: 'row',

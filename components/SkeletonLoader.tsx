@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, type ViewStyle, type DimensionValue } from 'react-native';
-import { COLORS, RADIUS, SPACING } from '../constants/config';
+import { COLORS, RADIUS, SPACING, SHADOW } from '../constants/config';
 
 function SkeletonBlock({ width, height, style }: { width?: DimensionValue; height?: number; style?: ViewStyle }) {
   const opacity = useRef(new Animated.Value(0.3)).current;
@@ -96,6 +96,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   cardRow: {
     flexDirection: 'row',
@@ -118,6 +119,7 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   notifCard: {
     flexDirection: 'row',
@@ -129,5 +131,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     gap: SPACING.md,
+    ...SHADOW.card,
   },
 });

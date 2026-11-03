@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,7 +9,7 @@ import { useToast } from '../../components/Toast';
 import { StatsSkeleton, ListSkeleton } from '../../components/SkeletonLoader';
 import { useHaptic } from '../../hooks/useHaptic';
 import { AnimatedListItem } from '../../components/AnimatedListItem';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import { BrandBar, EmptyState, IconAction, JobCard, NextJobCard, ScreenHeader, findMe, jobPay, localYmd } from '../../components/staff/StaffKit';
 import type { Booking, Staff } from '../../types';
 import { PHOTOS } from '../../components/media';
@@ -34,6 +35,7 @@ export default function StaffSchedule() {
   const [loading, setLoading] = useState(true);
   const { refreshing, onRefresh } = usePullRefresh(() => fetchBookings());
   const [filter, setFilter] = useState<DayFilter>('today');
+  const [week, setWeek] = useState<{ total: number; jobs: number; hours: number } | null>(null);
 
   const firstName = (user?.name || '').split(' ')[0] || 'there';
   const todayStr = localYmd();
@@ -42,7 +44,18 @@ export default function StaffSchedule() {
     try {
       const [data, staffList] = await Promise.all([staffApi.getBookings(), staffApi.getStaffList().catch(() => [] as Staff[])]);
       setBookings(data.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)));
-      setMe(findMe(staffList, user));
+      const mine = findMe(staffList, user);
+      setMe(mine);
+      // This week's pay for the Earnings card (Earnings has no tab of its own).
+      if (mine) {
+        staffApi
+          .getWeeklyInvoice(mine.id)
+          .then((w: any) => {
+            const jobs = Array.isArray(w?.jobs) ? w.jobs : [];
+            setWeek({ total: Number(w?.totalShare || 0), jobs: jobs.length, hours: jobs.reduce((t: number, j: any) => t + Number(j.yourHours || 0), 0) });
+          })
+          .catch(() => setWeek(null));
+      }
     } catch {
       showToast('Could not load schedule', 'error');
     }
@@ -106,16 +119,42 @@ export default function StaffSchedule() {
 
       <View style={styles.statsRow}>
         {[
-          { n: todayCount, label: 'Today', color: COLORS.primary },
-          { n: upcomingCount, label: 'Upcoming', color: COLORS.text },
-          { n: doneCount, label: 'Completed', color: COLORS.secondary },
+          { n: todayCount, label: 'Today', color: COLORS.primary, icon: 'today-outline' as const },
+          { n: upcomingCount, label: 'Upcoming', color: '#6d52e8', icon: 'calendar-outline' as const },
+          { n: doneCount, label: 'Completed', color: COLORS.secondary, icon: 'checkmark-done-outline' as const },
         ].map((s) => (
           <View key={s.label} style={styles.statCard}>
-            <Text style={[styles.statNum, { color: s.color }]}>{s.n}</Text>
+            <View style={[styles.statIcon, { backgroundColor: s.color + '18' }]}>
+              <Ionicons name={s.icon} size={16} color={s.color} />
+            </View>
+            <Text style={styles.statNum}>{s.n}</Text>
             <Text style={styles.statLabel}>{s.label}</Text>
           </View>
         ))}
       </View>
+
+      <TouchableOpacity
+        style={styles.earnCard}
+        activeOpacity={0.85}
+        onPress={() => router.push('/(staff)/earnings')}
+        accessibilityRole="button"
+        accessibilityLabel="Open earnings and weekly invoice"
+      >
+        <View style={styles.earnIcon}>
+          <Ionicons name="wallet" size={20} color={COLORS.secondary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.earnLabel}>Earned this week</Text>
+          <Text style={styles.earnValue}>{'£'}{(week?.total ?? 0).toFixed(2)}</Text>
+          <Text style={styles.earnSub}>
+            {week ? `${week.jobs} job${week.jobs === 1 ? '' : 's'} · ${week.hours.toFixed(1)} hrs` : 'Your pay and weekly invoice'}
+          </Text>
+        </View>
+        <View style={styles.earnGo}>
+          <Text style={styles.earnGoText}>Earnings</Text>
+          <Ionicons name="chevron-forward" size={14} color={COLORS.secondary} />
+        </View>
+      </TouchableOpacity>
 
       <View style={styles.segment}>
         {[
@@ -209,13 +248,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
-    paddingVertical: SPACING.md,
-    alignItems: 'center',
+    padding: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.border + '80',
+    borderColor: COLORS.border + '66',
+    ...SHADOW.card,
   },
-  statNum: { fontSize: 22, fontWeight: '700' },
-  statLabel: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  statIcon: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.sm },
+  statNum: { fontSize: 22, fontWeight: '800', color: COLORS.text, letterSpacing: -0.3 },
+  statLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary, marginTop: 1 },
+
+  earnCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.base,
+    marginBottom: SPACING.base,
+    borderWidth: 1,
+    borderColor: COLORS.secondary + '33',
+    ...SHADOW.card,
+  },
+  earnIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: COLORS.successLight, alignItems: 'center', justifyContent: 'center' },
+  earnLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  earnValue: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.4, marginTop: 1 },
+  earnSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  earnGo: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: COLORS.successLight, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.full },
+  earnGoText: { fontSize: 12, fontWeight: '800', color: COLORS.secondary },
 
   segment: { flexDirection: 'row', backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.md, padding: 4, marginBottom: SPACING.md },
   segmentBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: RADIUS.sm },

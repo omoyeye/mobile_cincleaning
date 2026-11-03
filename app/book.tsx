@@ -25,7 +25,7 @@ import { FadeInUp, PressableScale } from '../components/Motion';
 import { servicePhoto, wrapName } from '../components/media';
 import { useAuth } from '../contexts/AuthContext';
 import { publicApi, bookingsApi, customerApi } from '../services/api';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import type { Booking, ServiceConfig, Extra, SelectedExtra, PropertyDetails } from '../types';
 import { calculateHourlyPrice, hourlyRateFor, londonRateOf, lookupPricingRegion, type PricingRegion } from '../utils/pricing';
 
@@ -1930,7 +1930,7 @@ const styles = StyleSheet.create({
   serviceCard: {
     backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, overflow: 'hidden',
     borderWidth: 1.5, borderColor: COLORS.borderLight,
-    shadowColor: '#0c1f33', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+    shadowColor: '#0c1f33', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
   },
   serviceCardActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + '08' },
   servicePhotoWrap: { height: 92, backgroundColor: COLORS.surfaceAlt },
@@ -1952,6 +1952,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.base, paddingVertical: 12,
     marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   counterLabel: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   counterText: { fontSize: 15, fontWeight: '500', color: COLORS.text },
@@ -1978,6 +1979,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.base, paddingVertical: 14,
     marginBottom: SPACING.sm, borderWidth: 1.5, borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   materialRowActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + '08' },
   radioOuter: {
@@ -1996,6 +1998,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.base, paddingVertical: 14,
     marginBottom: SPACING.sm, borderWidth: 1.5, borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   extraCardActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + '08' },
   extraLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 },
@@ -2077,6 +2080,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
     paddingHorizontal: SPACING.base, borderWidth: 1, borderColor: COLORS.borderLight,
     marginBottom: SPACING.lg,
+    ...SHADOW.card,
   },
 
   discountRow: { flexDirection: 'row', gap: SPACING.sm },
@@ -2111,6 +2115,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
     padding: SPACING.base, marginTop: SPACING.lg,
     borderWidth: 1, borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
   breakdownLabel: { fontSize: 13, color: COLORS.textSecondary },
@@ -2164,6 +2169,7 @@ const styles = StyleSheet.create({
   rewardsCard: {
     backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.base,
     borderWidth: 1, borderColor: '#a7f3d0', marginBottom: SPACING.md, gap: SPACING.sm,
+    ...SHADOW.card,
   },
   rewardRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: 4 },
   rewardTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text },

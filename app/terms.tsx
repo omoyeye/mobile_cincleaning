@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { goBack } from '../utils/navigation';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 
 const TERMS_SECTIONS = [
   {
@@ -259,6 +259,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
   sectionBody: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 20 },

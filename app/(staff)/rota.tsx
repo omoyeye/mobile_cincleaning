@@ -20,7 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { useHaptic } from '../../hooks/useHaptic';
 import { ListSkeleton } from '../../components/SkeletonLoader';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import {
   BrandBar,
   EmptyState,
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
   holidayBtn: { backgroundColor: '#4f46e5', borderRadius: RADIUS.full, paddingHorizontal: 14, paddingVertical: 8 },
   holidayBtnText: { color: COLORS.white, fontSize: 13, fontWeight: '800' },
 
-  availCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderLight, padding: SPACING.base, marginTop: SPACING.lg },
+  availCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderLight, padding: SPACING.base, marginTop: SPACING.lg, ...SHADOW.card },
   availHead: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md },
   availTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
   availSub: { fontSize: 12.5, color: COLORS.textSecondary, marginTop: 3, lineHeight: 17 },
@@ -635,6 +635,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     gap: 4,
+    ...SHADOW.card,
   },
   summaryNum: { fontSize: 24, fontWeight: '800', color: COLORS.text },
   summaryLabel: { fontSize: 10, fontWeight: '600', color: COLORS.textTertiary },
@@ -645,6 +646,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   dayCardOff: { opacity: 0.6 },
   dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

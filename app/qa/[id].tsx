@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { KeyboardAwareScrollView, KeyboardToolbar } from 'react-native-keyboard-controller';
 import { qaApi } from '../../services/api';
 import { useToast } from '../../components/Toast';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import { EmptyState, friendlyDay, serviceLabel } from '../../components/ClientKit';
 import { goBack } from '../../utils/navigation';
 import type { QaCheck, QaJob } from '../../types';
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.borderLight, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: COLORS.text },
   scroll: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxxl },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border + '80', padding: SPACING.md, gap: 6 },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border + '80', padding: SPACING.md, gap: 6, ...SHADOW.card },
   title: { fontSize: 18, fontWeight: '800', color: COLORS.text },
   meta: { flex: 1, fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
   metaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },

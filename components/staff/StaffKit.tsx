@@ -121,9 +121,14 @@ export function ScreenHeader({ title, subtitle, right, eyebrow }: { title: strin
 }
 
 /** Logo in the middle, notification bell in the top right corner. `padded` when the screen has no side padding. */
-export function BrandBar({ padded = false }: { padded?: boolean }) {
+export function BrandBar({ padded = false, onBack }: { padded?: boolean; /** Shows a back button on the left (screens opened from elsewhere). */ onBack?: () => void }) {
   return (
     <View style={[kit.brandBar, padded && { paddingHorizontal: SPACING.lg }]}>
+      {onBack ? (
+        <TouchableOpacity onPress={onBack} style={[kit.brandBack, padded && { left: SPACING.lg }]} accessibilityLabel="Back" hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <Ionicons name="chevron-back" size={22} color={COLORS.text} />
+        </TouchableOpacity>
+      ) : null}
       <Image source={require('../../assets/brand-logo.png')} style={kit.brandLogo} resizeMode="contain" />
       <View style={[kit.brandBell, padded && { right: SPACING.lg }]}>
         <NotificationBell />
@@ -314,6 +319,7 @@ export const kit = StyleSheet.create({
   subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
   brandBar: { alignItems: 'center', justifyContent: 'center', paddingTop: SPACING.xs, minHeight: 46 },
   brandBell: { position: 'absolute', right: 0, top: SPACING.xs },
+  brandBack: { position: 'absolute', left: 0, top: SPACING.xs, width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.borderLight, alignItems: 'center', justifyContent: 'center' },
   brandLogo: { width: 110, height: 34 },
 
   card: {
@@ -323,10 +329,10 @@ export const kit = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border + '80',
     shadowColor: '#0c1f33',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
 
   badge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.full },
@@ -371,10 +377,10 @@ export const kit = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: SPACING.sm,
     shadowColor: '#0c1f33',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   jobTime: { width: 76, alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.md, backgroundColor: COLORS.primary + '0d', borderRightWidth: 1, borderRightColor: COLORS.primary + '1a' },
   jobTimeDone: { backgroundColor: COLORS.status.completedBg, borderRightColor: COLORS.status.completed + '22' },

@@ -15,7 +15,7 @@ import { bookingsApi, customerApi } from '../services/api';
 import { useToast } from '../components/Toast';
 import { ListSkeleton } from '../components/SkeletonLoader';
 import { useHaptic } from '../hooks/useHaptic';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import type { Booking, Notification } from '../types';
 import { ScreenHeader } from '../components/ClientKit';
 import { alertTarget } from '../utils/alerts';
@@ -277,6 +277,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     gap: SPACING.md,
+    ...SHADOW.card,
   },
   cardUnread: { backgroundColor: COLORS.primary + '06', borderColor: COLORS.primary + '20' },
   iconWrap: {

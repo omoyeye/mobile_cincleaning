@@ -22,7 +22,7 @@ import { goBack } from '../../utils/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { bookingsApi, staffApi, customerApi, mapsApi, publicApi } from '../../services/api';
 import { useToast } from '../../components/Toast';
-import { COLORS, SPACING, RADIUS } from '../../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../../constants/config';
 import type { Booking, BookingTracking, Staff } from '../../types';
 import { findMe, jobPay } from '../../components/staff/StaffKit';
 import { distanceKm, formatClock, isTodayYmd, minutesAgo } from '../../utils/tracking';
@@ -943,6 +943,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border + '80',
     paddingHorizontal: SPACING.base,
     marginBottom: SPACING.md,
+    ...SHADOW.card,
   },
   detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
   detailIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: COLORS.primary + '12', alignItems: 'center', justifyContent: 'center' },
@@ -1002,6 +1003,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   cardIconRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
   prepCard: {
@@ -1011,6 +1013,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   prepRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: 6 },
   prepText: { flex: 1, fontSize: 14, color: COLORS.text, lineHeight: 20 },
@@ -1099,6 +1102,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.primary + '30',
     gap: SPACING.md,
+    ...SHADOW.card,
   },
   rescheduleTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   rescheduleHint: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },

@@ -7,7 +7,7 @@ import { customerApi } from '../services/api';
 import { useToast } from './Toast';
 import { useBusinessContact } from '../hooks/useBusinessContact';
 import { photoToDataUrl } from '../utils/photos';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { money } from './ClientKit';
 import { paymentState } from '../utils/clientPortal';
 import type { Booking, PaymentEvidenceItem, PublicStaff } from '../types';
@@ -344,7 +344,7 @@ export function BookingPayments({ booking, onChange }: { booking: Booking; onCha
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border + '80', padding: SPACING.base, marginBottom: SPACING.md },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border + '80', padding: SPACING.base, marginBottom: SPACING.md, ...SHADOW.card },
   cardTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, marginBottom: SPACING.sm },
 
   pendingRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },

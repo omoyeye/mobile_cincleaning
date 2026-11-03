@@ -341,10 +341,10 @@ export function PrimaryButton({
 
 const shadow = {
   shadowColor: '#0c1f33',
-  shadowOffset: { width: 0, height: 1 },
-  shadowOpacity: 0.04,
-  shadowRadius: 3,
-  elevation: 1,
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  elevation: 3,
 } as const;
 
 export const ck = StyleSheet.create({

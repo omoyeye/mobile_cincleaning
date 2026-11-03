@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { goBack } from '../utils/navigation';
-import { COLORS, SPACING, RADIUS } from '../constants/config';
+import { COLORS, SPACING, RADIUS, SHADOW } from '../constants/config';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -202,6 +202,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   cardIcon: {
     width: 56,
@@ -253,6 +254,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   infoIcon: {
     width: 32,
@@ -281,6 +283,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    ...SHADOW.card,
   },
   consentNote: {
     fontSize: 11,
