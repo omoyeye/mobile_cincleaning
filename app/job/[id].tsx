@@ -325,10 +325,16 @@ export default function JobScreen() {
     const clockOutTime = new Date();
     try {
       const allPhotos: string[] = [];
-      for (const p of [...beforePhotos, ...afterPhotos]) {
+      // Same order as the photos, so the office can tell before from after.
+      const photoLabels: ('before' | 'after')[] = [];
+      const tagged = [...beforePhotos.map((p) => ({ p, label: 'before' as const })), ...afterPhotos.map((p) => ({ p, label: 'after' as const }))];
+      for (const { p, label } of tagged) {
         try {
           const url = await photoToDataUrl(p.uri, p.width, p.height);
-          if (url.length > 30) allPhotos.push(url);
+          if (url.length > 30) {
+            allPhotos.push(url);
+            photoLabels.push(label);
+          }
         } catch {
           /* photo file no longer on the phone; submit the rest */
         }
@@ -345,6 +351,7 @@ export default function JobScreen() {
         location: location || undefined,
         signature: signature || undefined,
         photos: allPhotos.length > 0 ? allPhotos : undefined,
+        photoLabels: allPhotos.length > 0 ? photoLabels : undefined,
         // What was ticked, so supervisors can check the work against it.
         checklist,
       });

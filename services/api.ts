@@ -292,6 +292,7 @@ export const staffApi = {
     location?: { lat: number; lng: number };
     signature?: string;
     checklist?: { task: string; done: boolean }[];
+    photoLabels?: ('before' | 'after')[];
   }) =>
     request(`/api/bookings/${bookingId}/complete`, {
       method: 'PATCH',
